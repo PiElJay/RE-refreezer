@@ -58,3 +58,7 @@ These checks require an authenticated Deezer session and have to be performed on
 10. Check 320-pixel phone width, landscape, tablet width and large text. Check the mini-player, queue and download hub.
 
 Deezer catalog availability and lyric coverage depend on the account and provider. Automated invariant tests do not substitute for the authenticated device checks above.
+
+### Browser login repair
+
+Browser login now reads the Deezer `arl` session cookie through the native WebView cookie manager after sign-in. It no longer forces `/open_app` or waits for `deezer.page.link` / `dzr.page.link` intents. A periodic check also handles login without a page reload. Reads stop on disposal and completion; HTTP errors on the main page offer a way back. Credentials and cookies are never printed. No Deezer app credentials are needed for this browser flow. A real authenticated device sign-in still requires manual verification.

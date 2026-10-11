@@ -105,6 +105,7 @@ class _ReFreezerAppState extends State<ReFreezerApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'ReFreezer',
+      debugShowCheckedModeBanner: false,
       shortcuts: <ShortcutActivator, Intent>{
         ...WidgetsApp.defaultShortcuts,
         LogicalKeySet(LogicalKeyboardKey.select):

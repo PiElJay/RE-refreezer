@@ -29,7 +29,7 @@ Copy `lib/.env.example` to `lib/.env`. Blank values permit compilation and ARL s
 ./tool/bootstrap.sh
 flutter analyze --no-pub --no-fatal-infos
 flutter test --no-pub
-flutter build apk --debug
+flutter build apk --debug --target-platform android-arm64 --split-per-abi
 ```
 
 Debug builds use the existing `.debug` application ID suffix and install separately from a release build. They do not share the release app's downloads or session. A release update requires the existing signing key; do not uninstall an existing app to resolve a signature mismatch without backing up its data.
@@ -37,6 +37,8 @@ Debug builds use the existing `.debug` application ID suffix and install separat
 The navigator dependency has a small local compatibility copy in `packages/custom_navigator`; it inherits new Flutter observer defaults and retains the upstream MIT license. The bootstrap script generates Dart 3.0-compatible serializers for the inherited Last.fm submodule without modifying its tracked source.
 
 ## Automated validation
+
+Android ARM64 debug APK compilation passed, including the Java stream server and JNI/CMake integration. APK signing verification passed; minimum API is 24 and target API is 35. This is a development build, not a signed release update.
 
 The regression suite covers 896 filtered-queue selections, duplicate identities, unavailable selections, bounded recovery in shuffle order, legacy cache compatibility, concurrent query persistence and log redaction. Widget checks render dashboard, player and search at 320×720, 844×390 and 1024×768 with 150% text scaling and verify search disposal. Static analysis has no compilation errors or warnings; informational lint/deprecation findings remain in inherited components.
 

@@ -75,3 +75,5 @@ translations/refreezer.zip
 translations/ReFreezer (translations).zip
 
 /android/build/
+
+/android/.kotlin/

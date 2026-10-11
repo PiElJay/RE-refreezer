@@ -1,4 +1,3 @@
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +5,7 @@ import 'package:fluttericon/font_awesome5_icons.dart';
 import 'package:fluttericon/typicons_icons.dart';
 import 'package:get_it/get_it.dart';
 
+import '../service/network_monitor.dart';
 import '../api/cache.dart';
 import '../api/deezer.dart';
 import '../api/definitions.dart';
@@ -29,23 +29,28 @@ openScreenByURL(String url) async {
   switch (res.type!) {
     case DeezerLinkType.TRACK:
       Track t = await deezerAPI.track(res.id!);
-      MenuSheet()
-          .defaultTrackMenu(t, context: mainNavigatorKey.currentContext!);
+      MenuSheet().defaultTrackMenu(
+        t,
+        context: mainNavigatorKey.currentContext!,
+      );
       break;
     case DeezerLinkType.ALBUM:
       Album a = await deezerAPI.album(res.id!);
-      mainNavigatorKey.currentState
-          ?.push(MaterialPageRoute(builder: (context) => AlbumDetails(a)));
+      mainNavigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (context) => AlbumDetails(a)),
+      );
       break;
     case DeezerLinkType.ARTIST:
       Artist a = await deezerAPI.artist(res.id!);
-      mainNavigatorKey.currentState
-          ?.push(MaterialPageRoute(builder: (context) => ArtistDetails(a)));
+      mainNavigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (context) => ArtistDetails(a)),
+      );
       break;
     case DeezerLinkType.PLAYLIST:
       Playlist p = await deezerAPI.playlist(res.id!);
-      mainNavigatorKey.currentState
-          ?.push(MaterialPageRoute(builder: (context) => PlaylistDetails(p)));
+      mainNavigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (context) => PlaylistDetails(p)),
+      );
       break;
   }
 }
@@ -60,6 +65,14 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   String? _query;
   bool _offline = false;
+  void _networkChanged() {
+    if (mounted)
+      setState(() {
+        _offline = NetworkMonitor.instance.offline;
+        _suggestions = [];
+      });
+  }
+
   bool _loading = false;
   final TextEditingController _controller = TextEditingController();
   final FocusNode _keyboardListenerFocusNode = FocusNode();
@@ -73,6 +86,11 @@ class _SearchScreenState extends State<SearchScreen> {
       _query = query;
     }
 
+    _query = (_query ?? '').trim();
+    if (_query!.isEmpty) return;
+    await cache.rememberQuery(_query!);
+    if (!mounted) return;
+    _offline = _offline || NetworkMonitor.instance.offline;
     //URL
     if (_query != null && _query!.startsWith('http')) {
       setState(() => _loading = true);
@@ -83,28 +101,23 @@ class _SearchScreenState extends State<SearchScreen> {
           print(e);
         }
       }
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
       return;
     }
 
-    Navigator.of(context).push(MaterialPageRoute(
-        builder: (context) => SearchResultsScreen(
-              _query ?? '',
-              offline: _offline,
-            )));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) =>
+            SearchResultsScreen(_query ?? '', offline: _offline),
+      ),
+    );
   }
 
   @override
   void initState() {
     _cancel = false;
-    //Check for connectivity and enable offline mode
-    Connectivity().checkConnectivity().then((res) {
-      if (res.isEmpty || res.contains(ConnectivityResult.none)) {
-        setState(() {
-          _offline = true;
-        });
-      }
-    });
+    NetworkMonitor.instance.addListener(_networkChanged);
+    _offline = NetworkMonitor.instance.offline;
 
     super.initState();
   }
@@ -118,7 +131,8 @@ class _SearchScreenState extends State<SearchScreen> {
     await Future.delayed(const Duration(milliseconds: 300));
     if (q != _query) return null;
     //Load
-    late List sugg;
+    List sugg = [];
+    if (NetworkMonitor.instance.offline) return [];
     try {
       sugg = await deezerAPI.searchSuggestions(_query!);
     } catch (e) {
@@ -127,29 +141,29 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     }
 
-    if (!_cancel) setState(() => _suggestions = sugg);
+    if (!_cancel && mounted && q == _query && !NetworkMonitor.instance.offline)
+      setState(() => _suggestions = sugg);
     return sugg;
   }
 
   Widget _removeHistoryItemWidget(int index) {
     return IconButton(
-        icon: Icon(
-          Icons.close,
-          semanticLabel: 'Remove'.i18n,
-        ),
-        onPressed: () async {
-          cache.searchHistory?.removeAt(index);
-          setState(() {});
-          await cache.save();
-        });
+      icon: Icon(Icons.close, semanticLabel: 'Remove'.i18n),
+      onPressed: () async {
+        cache.searchHistory?.removeAt(index);
+        setState(() {});
+        await cache.save();
+      },
+    );
   }
 
   @override
   void dispose() {
     _cancel = true;
-    _textFieldFocusNode.dispose();
-    _keyboardListenerFocusNode.dispose();
+    NetworkMonitor.instance.removeListener(_networkChanged);
     _controller.dispose();
+    _keyboardListenerFocusNode.dispose();
+    _textFieldFocusNode.dispose();
     super.dispose();
   }
 
@@ -160,23 +174,21 @@ class _SearchScreenState extends State<SearchScreen> {
         'Search'.i18n,
         actions: <Widget>[
           IconButton(
-            icon: Icon(
-              Icons.file_download,
-              semanticLabel: 'Download'.i18n,
-            ),
+            icon: Icon(Icons.file_download, semanticLabel: 'Download'.i18n),
             onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(
-                  builder: (context) => const DownloadsScreen()));
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const DownloadsScreen(),
+                ),
+              );
             },
           ),
           IconButton(
-            icon: Icon(
-              Icons.settings,
-              semanticLabel: 'Settings'.i18n,
-            ),
+            icon: Icon(Icons.settings, semanticLabel: 'Settings'.i18n),
             onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(
-                  builder: (context) => const SettingsScreen()));
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
             },
           ),
         ],
@@ -190,51 +202,54 @@ class _SearchScreenState extends State<SearchScreen> {
               child: Row(
                 children: <Widget>[
                   Expanded(
-                      child: Stack(
-                    alignment: const Alignment(1.0, 0.0),
-                    children: [
-                      KeyboardListener(
-                        focusNode: _keyboardListenerFocusNode,
-                        onKeyEvent: (event) {
-                          // For Android TV: quit search textfield
-                          if (event is KeyUpEvent) {
-                            if (event.logicalKey ==
-                                LogicalKeyboardKey.arrowDown) {
-                              _textFieldFocusNode.unfocus();
+                    child: Stack(
+                      alignment: const Alignment(1.0, 0.0),
+                      children: [
+                        KeyboardListener(
+                          focusNode: _keyboardListenerFocusNode,
+                          onKeyEvent: (event) {
+                            // For Android TV: quit search textfield
+                            if (event is KeyUpEvent) {
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowDown) {
+                                _textFieldFocusNode.unfocus();
+                              }
                             }
-                          }
-                        },
-                        child: TextField(
-                          onChanged: (String s) {
-                            setState(() {
-                              _showCards = false;
-                              _query = s;
-                            });
-                            _loadSuggestions();
                           },
-                          onTap: () {
-                            setState(() => _showCards = false);
-                          },
-                          focusNode: _textFieldFocusNode,
-                          decoration: InputDecoration(
-                            labelText: 'Search or paste URL'.i18n,
-                            fillColor:
-                                Theme.of(context).bottomAppBarTheme.color,
-                            filled: true,
-                            focusedBorder: const OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.grey)),
-                            enabledBorder: const OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.grey)),
+                          child: TextField(
+                            onChanged: (String s) {
+                              setState(() {
+                                _showCards = false;
+                                _query = s;
+                              });
+                              _loadSuggestions();
+                            },
+                            onTap: () {
+                              setState(() => _showCards = false);
+                            },
+                            focusNode: _textFieldFocusNode,
+                            decoration: InputDecoration(
+                              labelText: 'Search or paste URL'.i18n,
+                              fillColor: Theme.of(
+                                context,
+                              ).bottomAppBarTheme.color,
+                              filled: true,
+                              focusedBorder: const OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.grey),
+                              ),
+                              enabledBorder: const OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.grey),
+                              ),
+                            ),
+                            controller: _controller,
+                            textInputAction: TextInputAction.search,
+                            onSubmitted: (String s) {
+                              _submit(context, query: s);
+                              _textFieldFocusNode.unfocus();
+                            },
                           ),
-                          controller: _controller,
-                          textInputAction: TextInputAction.search,
-                          onSubmitted: (String s) {
-                            _submit(context, query: s);
-                            _textFieldFocusNode.unfocus();
-                          },
                         ),
-                      ),
-                      Focus(
+                        Focus(
                           canRequestFocus:
                               false, // Focus is moving to cross, and hangs out there,
                           descendantsAreFocusable:
@@ -260,15 +275,51 @@ class _SearchScreenState extends State<SearchScreen> {
                                 ),
                               ),
                             ],
-                          ))
-                    ],
-                  )),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
             Container(height: 8.0),
+            if (cache.searchQueries.isNotEmpty) ...[
+              ListTile(
+                title: const Text('Ricerche recenti'),
+                trailing: IconButton(
+                  tooltip: 'Cancella tutte',
+                  onPressed: () async {
+                    cache.searchQueries.clear();
+                    await cache.save();
+                    if (mounted) setState(() {});
+                  },
+                  icon: const Icon(Icons.delete_sweep_rounded),
+                ),
+              ),
+              ...cache.searchQueries
+                  .take(10)
+                  .map(
+                    (query) => ListTile(
+                      leading: const Icon(Icons.history_rounded),
+                      title: Text(query),
+                      onTap: () {
+                        _controller.text = query;
+                        _submit(context, query: query);
+                      },
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () async {
+                          cache.searchQueries.remove(query);
+                          await cache.save();
+                          if (mounted) setState(() {});
+                        },
+                      ),
+                    ),
+                  ),
+            ],
             ListTile(
-              title: Text('Offline search'.i18n),
+              title: const Text('Cerca solo nei download'),
               leading: const Icon(Icons.offline_pin),
               trailing: Switch(
                 value: _offline,
@@ -306,15 +357,19 @@ class _SearchScreenState extends State<SearchScreen> {
                     color: const Color(0xff7c42bb),
                     text: 'Shows'.i18n,
                     icon: const Icon(FontAwesome5.podcast),
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (context) => Scaffold(
-                        appBar: FreezerAppBar('Shows'.i18n),
-                        body: SingleChildScrollView(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => Scaffold(
+                          appBar: FreezerAppBar('Shows'.i18n),
+                          body: SingleChildScrollView(
                             child: HomePageScreen(
-                                channel: DeezerChannel(target: 'shows'))),
+                              channel: DeezerChannel(target: 'shows'),
+                            ),
+                          ),
+                        ),
                       ),
-                    )),
-                  )
+                    ),
+                  ),
                 ],
               ),
               Container(height: 4.0),
@@ -325,32 +380,40 @@ class _SearchScreenState extends State<SearchScreen> {
                     color: const Color(0xffff555d),
                     icon: const Icon(FontAwesome5.chart_line),
                     text: 'Charts'.i18n,
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (context) => Scaffold(
-                        appBar: FreezerAppBar('Charts'.i18n),
-                        body: SingleChildScrollView(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => Scaffold(
+                          appBar: FreezerAppBar('Charts'.i18n),
+                          body: SingleChildScrollView(
                             child: HomePageScreen(
-                                channel:
-                                    DeezerChannel(target: 'channels/charts'))),
+                              channel: DeezerChannel(target: 'channels/charts'),
+                            ),
+                          ),
+                        ),
                       ),
-                    )),
+                    ),
                   ),
                   SearchBrowseCard(
                     color: const Color(0xff2c4ea7),
                     text: 'Browse'.i18n,
                     icon: Image.asset('assets/browse_icon.png', width: 26.0),
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (context) => Scaffold(
-                        appBar: FreezerAppBar('Browse'.i18n),
-                        body: SingleChildScrollView(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => Scaffold(
+                          appBar: FreezerAppBar('Browse'.i18n),
+                          body: SingleChildScrollView(
                             child: HomePageScreen(
-                                channel:
-                                    DeezerChannel(target: 'channels/explore'))),
+                              channel: DeezerChannel(
+                                target: 'channels/explore',
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    )),
-                  )
+                    ),
+                  ),
                 ],
-              )
+              ),
             ],
 
             //History
@@ -358,74 +421,89 @@ class _SearchScreenState extends State<SearchScreen> {
                 (cache.searchHistory?.length ?? 0) > 0 &&
                 (_query ?? '').length < 2)
               ...List.generate(
-                  cache.searchHistory!.length > 10
-                      ? 10
-                      : cache.searchHistory!.length, (int i) {
-                dynamic data = cache.searchHistory![i].data;
-                switch (cache.searchHistory![i].type) {
-                  case SearchHistoryItemType.TRACK:
-                    return TrackTile(
-                      data,
-                      onTap: () {
-                        List<Track> queue = cache.searchHistory!
-                            .where((h) => h.type == SearchHistoryItemType.TRACK)
-                            .map<Track>((t) => t.data)
-                            .toList();
-                        GetIt.I<AudioPlayerHandler>().playFromTrackList(
+                cache.searchHistory!.length > 10
+                    ? 10
+                    : cache.searchHistory!.length,
+                (int i) {
+                  dynamic data = cache.searchHistory![i].data;
+                  switch (cache.searchHistory![i].type) {
+                    case SearchHistoryItemType.TRACK:
+                      return TrackTile(
+                        data,
+                        onTap: () {
+                          List<Track> queue = cache.searchHistory!
+                              .where(
+                                (h) => h.type == SearchHistoryItemType.TRACK,
+                              )
+                              .map<Track>((t) => t.data)
+                              .toList();
+                          GetIt.I<AudioPlayerHandler>().playFromTrackList(
                             queue,
                             data.id,
                             QueueSource(
-                                text: 'Search history'.i18n,
-                                source: 'searchhistory',
-                                id: 'searchhistory'));
-                      },
-                      onHold: () {
-                        MenuSheet m = MenuSheet();
-                        m.defaultTrackMenu(data, context: context);
-                      },
-                      trailing: _removeHistoryItemWidget(i),
-                    );
-                  case SearchHistoryItemType.ALBUM:
-                    return AlbumTile(
-                      data,
-                      onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(
-                            builder: (context) => AlbumDetails(data)));
-                      },
-                      onHold: () {
-                        MenuSheet m = MenuSheet();
-                        m.defaultAlbumMenu(data, context: context);
-                      },
-                      trailing: _removeHistoryItemWidget(i),
-                    );
-                  case SearchHistoryItemType.ARTIST:
-                    return ArtistHorizontalTile(
-                      data,
-                      onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(
-                            builder: (context) => ArtistDetails(data)));
-                      },
-                      onHold: () {
-                        MenuSheet m = MenuSheet();
-                        m.defaultArtistMenu(data, context: context);
-                      },
-                      trailing: _removeHistoryItemWidget(i),
-                    );
-                  case SearchHistoryItemType.PLAYLIST:
-                    return PlaylistTile(
-                      data,
-                      onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(
-                            builder: (context) => PlaylistDetails(data)));
-                      },
-                      onHold: () {
-                        MenuSheet m = MenuSheet();
-                        m.defaultPlaylistMenu(data, context: context);
-                      },
-                      trailing: _removeHistoryItemWidget(i),
-                    );
-                }
-              }),
+                              text: 'Search history'.i18n,
+                              source: 'searchhistory',
+                              id: 'searchhistory',
+                            ),
+                          );
+                        },
+                        onHold: () {
+                          MenuSheet m = MenuSheet();
+                          m.defaultTrackMenu(data, context: context);
+                        },
+                        trailing: _removeHistoryItemWidget(i),
+                      );
+                    case SearchHistoryItemType.ALBUM:
+                      return AlbumTile(
+                        data,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => AlbumDetails(data),
+                            ),
+                          );
+                        },
+                        onHold: () {
+                          MenuSheet m = MenuSheet();
+                          m.defaultAlbumMenu(data, context: context);
+                        },
+                        trailing: _removeHistoryItemWidget(i),
+                      );
+                    case SearchHistoryItemType.ARTIST:
+                      return ArtistHorizontalTile(
+                        data,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => ArtistDetails(data),
+                            ),
+                          );
+                        },
+                        onHold: () {
+                          MenuSheet m = MenuSheet();
+                          m.defaultArtistMenu(data, context: context);
+                        },
+                        trailing: _removeHistoryItemWidget(i),
+                      );
+                    case SearchHistoryItemType.PLAYLIST:
+                      return PlaylistTile(
+                        data,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => PlaylistDetails(data),
+                            ),
+                          );
+                        },
+                        onHold: () {
+                          MenuSheet m = MenuSheet();
+                          m.defaultPlaylistMenu(data, context: context);
+                        },
+                        trailing: _removeHistoryItemWidget(i),
+                      );
+                  }
+                },
+              ),
 
             //Clear history
             if (cache.searchHistory != null && cache.searchHistory!.length > 2)
@@ -441,15 +519,16 @@ class _SearchScreenState extends State<SearchScreen> {
 
             //Suggestions
             ...List.generate(
-                _suggestions.length,
-                (i) => ListTile(
-                      title: Text(_suggestions[i]),
-                      leading: const Icon(Icons.search),
-                      onTap: () {
-                        setState(() => _query = _suggestions[i]);
-                        _submit(context);
-                      },
-                    ))
+              _suggestions.length,
+              (i) => ListTile(
+                title: Text(_suggestions[i]),
+                leading: const Icon(Icons.search),
+                onTap: () {
+                  setState(() => _query = _suggestions[i]);
+                  _submit(context);
+                },
+              ),
+            ),
           ],
         ),
       ),
@@ -462,44 +541,50 @@ class SearchBrowseCard extends StatelessWidget {
   final Widget? icon;
   final VoidCallback onTap;
   final String text;
-  const SearchBrowseCard(
-      {super.key,
-      required this.color,
-      required this.onTap,
-      required this.text,
-      this.icon});
+  const SearchBrowseCard({
+    super.key,
+    required this.color,
+    required this.onTap,
+    required this.text,
+    this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Card(
-        color: color,
-        child: InkWell(
-          onTap: onTap,
-          child: SizedBox(
-            width: MediaQuery.of(context).size.width / 2 - 32,
-            height: 75,
-            child: Center(
-                child: Row(
+      color: color,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width / 2 - 32,
+          height: 75,
+          child: Center(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (icon != null) icon!,
                 if (icon != null) Container(width: 8.0),
-                Text(
-                  text,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                Flexible(
+                  child: Text(
+                    text,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
                       fontSize: 18.0,
                       fontWeight: FontWeight.bold,
                       color: (color.computeLuminance() > 0.5)
                           ? Colors.black
-                          : Colors.white),
+                          : Colors.white,
+                    ),
+                  ),
                 ),
               ],
-            )),
+            ),
           ),
-        ));
+        ),
+      ),
+    );
   }
 }
 
@@ -510,356 +595,384 @@ class SearchResultsScreen extends StatelessWidget {
   const SearchResultsScreen(this.query, {super.key, this.offline});
 
   Future _search() async {
-    if (offline ?? false) {
+    if ((offline ?? false) || NetworkMonitor.instance.offline) {
       return await downloadManager.search(query);
     }
-    return await deezerAPI.search(query);
+    try {
+      return await deezerAPI.search(query).timeout(const Duration(seconds: 10));
+    } catch (_) {
+      await NetworkMonitor.instance.refresh();
+      if (NetworkMonitor.instance.offline)
+        return await downloadManager.search(query);
+      rethrow;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: FreezerAppBar('Search Results'.i18n),
-        body: FutureBuilder(
-          future: _search(),
-          builder: (BuildContext context, AsyncSnapshot snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(
-                child: CircularProgressIndicator(),
-              );
-            }
-            if (snapshot.hasError) return const ErrorScreen();
+      appBar: FreezerAppBar('Search Results'.i18n),
+      body: FutureBuilder(
+        future: _search(),
+        builder: (BuildContext context, AsyncSnapshot snapshot) {
+          if (snapshot.hasError) return const ErrorScreen();
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-            SearchResults results = snapshot.data;
+          SearchResults results = snapshot.data;
 
-            if (results.empty) {
-              return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    const Icon(
-                      Icons.warning,
-                      size: 64,
-                    ),
-                    Text('No results!'.i18n)
-                  ],
-                ),
-              );
-            }
-
-            //Tracks
-            List<Widget> tracks = [];
-            if (results.tracks != null && results.tracks!.isNotEmpty) {
-              tracks = [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16.0, vertical: 4.0),
-                  child: Text(
-                    'Tracks'.i18n,
-                    textAlign: TextAlign.left,
-                    style: const TextStyle(
-                        fontSize: 20.0, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                ...List.generate(3, (i) {
-                  if (results.tracks!.length <= i) {
-                    return const SizedBox(
-                      width: 0,
-                      height: 0,
-                    );
-                  }
-                  Track t = results.tracks![i];
-                  return TrackTile(
-                    t,
-                    onTap: () {
-                      cache.addToSearchHistory(t);
-                      GetIt.I<AudioPlayerHandler>().playFromTrackList(
-                          results.tracks!,
-                          t.id ?? '',
-                          QueueSource(
-                              text: 'Search'.i18n,
-                              id: query,
-                              source: 'search'));
-                    },
-                    onHold: () {
-                      MenuSheet m = MenuSheet();
-                      m.defaultTrackMenu(t, context: context);
-                    },
-                  );
-                }),
-                ListTile(
-                  title: Text('Show all tracks'.i18n),
-                  onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(
-                        builder: (context) => TrackListScreen(
-                            results.tracks!,
-                            QueueSource(
-                                id: query,
-                                source: 'search',
-                                text: 'Search'.i18n))));
-                  },
-                ),
-                const FreezerDivider()
-              ];
-            }
-
-            //Albums
-            List<Widget> albums = [];
-            if (results.albums != null && results.albums!.isNotEmpty) {
-              albums = [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16.0, vertical: 4.0),
-                  child: Text(
-                    'Albums'.i18n,
-                    textAlign: TextAlign.left,
-                    style: const TextStyle(
-                        fontSize: 20.0, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                ...List.generate(3, (i) {
-                  if (results.albums!.length <= i) {
-                    return const SizedBox(
-                      height: 0,
-                      width: 0,
-                    );
-                  }
-                  Album a = results.albums![i];
-                  return AlbumTile(
-                    a,
-                    onHold: () {
-                      MenuSheet m = MenuSheet();
-                      m.defaultAlbumMenu(a, context: context);
-                    },
-                    onTap: () {
-                      cache.addToSearchHistory(a);
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (context) => AlbumDetails(a)));
-                    },
-                  );
-                }),
-                ListTile(
-                  title: Text('Show all albums'.i18n),
-                  onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(
-                        builder: (context) =>
-                            AlbumListScreen(results.albums!)));
-                  },
-                ),
-                const FreezerDivider()
-              ];
-            }
-
-            //Artists
-            List<Widget> artists = [];
-            if (results.artists != null && results.artists!.isNotEmpty) {
-              artists = [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 4.0, horizontal: 16.0),
-                  child: Text(
-                    'Artists'.i18n,
-                    textAlign: TextAlign.left,
-                    style: const TextStyle(
-                        fontSize: 20.0, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                Container(height: 4),
-                SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: List.generate(results.artists!.length, (int i) {
-                        Artist a = results.artists![i];
-                        return ArtistTile(
-                          a,
-                          onTap: () {
-                            cache.addToSearchHistory(a);
-                            Navigator.of(context).push(MaterialPageRoute(
-                                builder: (context) => ArtistDetails(a)));
-                          },
-                          onHold: () {
-                            MenuSheet m = MenuSheet();
-                            m.defaultArtistMenu(a, context: context);
-                          },
-                        );
-                      }),
-                    )),
-                const FreezerDivider()
-              ];
-            }
-
-            //Playlists
-            List<Widget> playlists = [];
-            if (results.playlists != null && results.playlists!.isNotEmpty) {
-              playlists = [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 4.0, horizontal: 16.0),
-                  child: Text(
-                    'Playlists'.i18n,
-                    textAlign: TextAlign.left,
-                    style: const TextStyle(
-                        fontSize: 20.0, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                ...List.generate(3, (i) {
-                  if (results.playlists!.length <= i) {
-                    return const SizedBox(
-                      height: 0,
-                      width: 0,
-                    );
-                  }
-                  Playlist p = results.playlists![i];
-                  return PlaylistTile(
-                    p,
-                    onTap: () {
-                      cache.addToSearchHistory(p);
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (context) => PlaylistDetails(p)));
-                    },
-                    onHold: () {
-                      MenuSheet m = MenuSheet();
-                      m.defaultPlaylistMenu(p, context: context);
-                    },
-                  );
-                }),
-                ListTile(
-                  title: Text('Show all playlists'.i18n),
-                  onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(
-                        builder: (context) =>
-                            SearchResultPlaylists(results.playlists!)));
-                  },
-                ),
-                const FreezerDivider()
-              ];
-            }
-
-            //Shows
-            List<Widget> shows = [];
-            if (results.shows != null && results.shows!.isNotEmpty) {
-              shows = [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 4.0, horizontal: 16.0),
-                  child: Text(
-                    'Shows'.i18n,
-                    textAlign: TextAlign.left,
-                    style: const TextStyle(
-                        fontSize: 20.0, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                ...List.generate(3, (i) {
-                  if (results.shows!.length <= i) {
-                    return const SizedBox(
-                      height: 0,
-                      width: 0,
-                    );
-                  }
-                  Show s = results.shows![i];
-                  return ShowTile(
-                    s,
-                    onTap: () async {
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (context) => ShowScreen(s)));
-                    },
-                  );
-                }),
-                ListTile(
-                  title: Text('Show all shows'.i18n),
-                  onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(
-                        builder: (context) => ShowListScreen(results.shows!)));
-                  },
-                ),
-                const FreezerDivider()
-              ];
-            }
-
-            //Episodes
-            List<Widget> episodes = [];
-            if (results.episodes != null && results.episodes!.isNotEmpty) {
-              episodes = [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 4.0, horizontal: 16.0),
-                  child: Text(
-                    'Episodes'.i18n,
-                    textAlign: TextAlign.left,
-                    style: const TextStyle(
-                        fontSize: 20.0, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                ...List.generate(3, (i) {
-                  if (results.episodes!.length <= i) {
-                    return const SizedBox(
-                      height: 0,
-                      width: 0,
-                    );
-                  }
-                  ShowEpisode e = results.episodes![i];
-                  return ShowEpisodeTile(
-                    e,
-                    trailing: IconButton(
-                      icon: Icon(
-                        Icons.more_vert,
-                        semanticLabel: 'Options'.i18n,
-                      ),
-                      onPressed: () {
-                        MenuSheet m = MenuSheet();
-                        m.defaultShowEpisodeMenu(e.show!, e, context: context);
-                      },
-                    ),
-                    onTap: () async {
-                      //Load entire show, then play
-                      List<ShowEpisode> episodes =
-                          await deezerAPI.allShowEpisodes(e.show!.id ?? '');
-                      await GetIt.I<AudioPlayerHandler>().playShowEpisode(
-                          e.show!, episodes,
-                          index: episodes.indexWhere((ep) => e.id == ep.id));
-                    },
-                  );
-                }),
-                ListTile(
-                    title: Text('Show all episodes'.i18n),
-                    onTap: () {
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (context) =>
-                              EpisodeListScreen(results.episodes!)));
-                    })
-              ];
-            }
-
-            return ListView(
-              children: <Widget>[
-                Container(
-                  height: 8.0,
-                ),
-                ...tracks,
-                Container(
-                  height: 8.0,
-                ),
-                ...albums,
-                Container(
-                  height: 8.0,
-                ),
-                ...artists,
-                Container(
-                  height: 8.0,
-                ),
-                ...playlists,
-                Container(
-                  height: 8.0,
-                ),
-                ...shows,
-                Container(
-                  height: 8.0,
-                ),
-                ...episodes
-              ],
+          if (results.empty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Icon(Icons.warning, size: 64),
+                  Text('No results!'.i18n),
+                ],
+              ),
             );
-          },
-        ));
+          }
+
+          //Tracks
+          List<Widget> tracks = [];
+          if (results.tracks != null && results.tracks!.isNotEmpty) {
+            tracks = [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 4.0,
+                ),
+                child: Text(
+                  'Tracks'.i18n,
+                  textAlign: TextAlign.left,
+                  style: const TextStyle(
+                    fontSize: 20.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              ...List.generate(3, (i) {
+                if (results.tracks!.length <= i) {
+                  return const SizedBox(width: 0, height: 0);
+                }
+                Track t = results.tracks![i];
+                return TrackTile(
+                  t,
+                  onTap: () {
+                    cache.addToSearchHistory(t);
+                    GetIt.I<AudioPlayerHandler>().playFromTrackList(
+                      results.tracks!,
+                      t.id ?? '',
+                      QueueSource(
+                        text: 'Search'.i18n,
+                        id: query,
+                        source: 'search',
+                      ),
+                      selectedIndex: i,
+                    );
+                  },
+                  onHold: () {
+                    MenuSheet m = MenuSheet();
+                    m.defaultTrackMenu(t, context: context);
+                  },
+                );
+              }),
+              ListTile(
+                title: Text('Show all tracks'.i18n),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => TrackListScreen(
+                        results.tracks!,
+                        QueueSource(
+                          id: query,
+                          source: 'search',
+                          text: 'Search'.i18n,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const FreezerDivider(),
+            ];
+          }
+
+          //Albums
+          List<Widget> albums = [];
+          if (results.albums != null && results.albums!.isNotEmpty) {
+            albums = [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 4.0,
+                ),
+                child: Text(
+                  'Albums'.i18n,
+                  textAlign: TextAlign.left,
+                  style: const TextStyle(
+                    fontSize: 20.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              ...List.generate(3, (i) {
+                if (results.albums!.length <= i) {
+                  return const SizedBox(height: 0, width: 0);
+                }
+                Album a = results.albums![i];
+                return AlbumTile(
+                  a,
+                  onHold: () {
+                    MenuSheet m = MenuSheet();
+                    m.defaultAlbumMenu(a, context: context);
+                  },
+                  onTap: () {
+                    cache.addToSearchHistory(a);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => AlbumDetails(a)),
+                    );
+                  },
+                );
+              }),
+              ListTile(
+                title: Text('Show all albums'.i18n),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => AlbumListScreen(results.albums!),
+                    ),
+                  );
+                },
+              ),
+              const FreezerDivider(),
+            ];
+          }
+
+          //Artists
+          List<Widget> artists = [];
+          if (results.artists != null && results.artists!.isNotEmpty) {
+            artists = [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 4.0,
+                  horizontal: 16.0,
+                ),
+                child: Text(
+                  'Artists'.i18n,
+                  textAlign: TextAlign.left,
+                  style: const TextStyle(
+                    fontSize: 20.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Container(height: 4),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: List.generate(results.artists!.length, (int i) {
+                    Artist a = results.artists![i];
+                    return ArtistTile(
+                      a,
+                      onTap: () {
+                        cache.addToSearchHistory(a);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => ArtistDetails(a),
+                          ),
+                        );
+                      },
+                      onHold: () {
+                        MenuSheet m = MenuSheet();
+                        m.defaultArtistMenu(a, context: context);
+                      },
+                    );
+                  }),
+                ),
+              ),
+              const FreezerDivider(),
+            ];
+          }
+
+          //Playlists
+          List<Widget> playlists = [];
+          if (results.playlists != null && results.playlists!.isNotEmpty) {
+            playlists = [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 4.0,
+                  horizontal: 16.0,
+                ),
+                child: Text(
+                  'Playlists'.i18n,
+                  textAlign: TextAlign.left,
+                  style: const TextStyle(
+                    fontSize: 20.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              ...List.generate(3, (i) {
+                if (results.playlists!.length <= i) {
+                  return const SizedBox(height: 0, width: 0);
+                }
+                Playlist p = results.playlists![i];
+                return PlaylistTile(
+                  p,
+                  onTap: () {
+                    cache.addToSearchHistory(p);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => PlaylistDetails(p),
+                      ),
+                    );
+                  },
+                  onHold: () {
+                    MenuSheet m = MenuSheet();
+                    m.defaultPlaylistMenu(p, context: context);
+                  },
+                );
+              }),
+              ListTile(
+                title: Text('Show all playlists'.i18n),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          SearchResultPlaylists(results.playlists!),
+                    ),
+                  );
+                },
+              ),
+              const FreezerDivider(),
+            ];
+          }
+
+          //Shows
+          List<Widget> shows = [];
+          if (results.shows != null && results.shows!.isNotEmpty) {
+            shows = [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 4.0,
+                  horizontal: 16.0,
+                ),
+                child: Text(
+                  'Shows'.i18n,
+                  textAlign: TextAlign.left,
+                  style: const TextStyle(
+                    fontSize: 20.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              ...List.generate(3, (i) {
+                if (results.shows!.length <= i) {
+                  return const SizedBox(height: 0, width: 0);
+                }
+                Show s = results.shows![i];
+                return ShowTile(
+                  s,
+                  onTap: () async {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => ShowScreen(s)),
+                    );
+                  },
+                );
+              }),
+              ListTile(
+                title: Text('Show all shows'.i18n),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => ShowListScreen(results.shows!),
+                    ),
+                  );
+                },
+              ),
+              const FreezerDivider(),
+            ];
+          }
+
+          //Episodes
+          List<Widget> episodes = [];
+          if (results.episodes != null && results.episodes!.isNotEmpty) {
+            episodes = [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 4.0,
+                  horizontal: 16.0,
+                ),
+                child: Text(
+                  'Episodes'.i18n,
+                  textAlign: TextAlign.left,
+                  style: const TextStyle(
+                    fontSize: 20.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              ...List.generate(3, (i) {
+                if (results.episodes!.length <= i) {
+                  return const SizedBox(height: 0, width: 0);
+                }
+                ShowEpisode e = results.episodes![i];
+                return ShowEpisodeTile(
+                  e,
+                  trailing: IconButton(
+                    icon: Icon(Icons.more_vert, semanticLabel: 'Options'.i18n),
+                    onPressed: () {
+                      MenuSheet m = MenuSheet();
+                      m.defaultShowEpisodeMenu(e.show!, e, context: context);
+                    },
+                  ),
+                  onTap: () async {
+                    //Load entire show, then play
+                    List<ShowEpisode> episodes = await deezerAPI
+                        .allShowEpisodes(e.show!.id ?? '');
+                    await GetIt.I<AudioPlayerHandler>().playShowEpisode(
+                      e.show!,
+                      episodes,
+                      index: episodes.indexWhere((ep) => e.id == ep.id),
+                    );
+                  },
+                );
+              }),
+              ListTile(
+                title: Text('Show all episodes'.i18n),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          EpisodeListScreen(results.episodes!),
+                    ),
+                  );
+                },
+              ),
+            ];
+          }
+
+          return ListView(
+            children: <Widget>[
+              Container(height: 8.0),
+              ...tracks,
+              Container(height: 8.0),
+              ...albums,
+              Container(height: 8.0),
+              ...artists,
+              Container(height: 8.0),
+              ...playlists,
+              Container(height: 8.0),
+              ...shows,
+              Container(height: 8.0),
+              ...episodes,
+            ],
+          );
+        },
+      ),
+    );
   }
 }
 
@@ -881,8 +994,12 @@ class TrackListScreen extends StatelessWidget {
           return TrackTile(
             t,
             onTap: () {
-              GetIt.I<AudioPlayerHandler>()
-                  .playFromTrackList(tracks, t.id ?? '', queueSource);
+              GetIt.I<AudioPlayerHandler>().playFromTrackList(
+                tracks,
+                t.id ?? '',
+                queueSource,
+                selectedIndex: i,
+              );
             },
             onHold: () {
               MenuSheet m = MenuSheet();
@@ -911,8 +1028,9 @@ class AlbumListScreen extends StatelessWidget {
           return AlbumTile(
             a,
             onTap: () {
-              Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => AlbumDetails(a)));
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (context) => AlbumDetails(a)));
             },
             onHold: () {
               MenuSheet m = MenuSheet();
@@ -941,7 +1059,8 @@ class SearchResultPlaylists extends StatelessWidget {
             p,
             onTap: () {
               Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => PlaylistDetails(p)));
+                MaterialPageRoute(builder: (context) => PlaylistDetails(p)),
+              );
             },
             onHold: () {
               MenuSheet m = MenuSheet();
@@ -969,8 +1088,9 @@ class ShowListScreen extends StatelessWidget {
           return ShowTile(
             s,
             onTap: () {
-              Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (context) => ShowScreen(s)));
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (context) => ShowScreen(s)));
             },
           );
         },
@@ -986,33 +1106,34 @@ class EpisodeListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: FreezerAppBar('Episodes'.i18n),
-        body: ListView.builder(
-          itemCount: episodes.length,
-          itemBuilder: (context, i) {
-            ShowEpisode e = episodes[i];
-            return ShowEpisodeTile(
-              e,
-              trailing: IconButton(
-                icon: Icon(
-                  Icons.more_vert,
-                  semanticLabel: 'Options'.i18n,
-                ),
-                onPressed: () {
-                  MenuSheet m = MenuSheet();
-                  m.defaultShowEpisodeMenu(e.show!, e, context: context);
-                },
-              ),
-              onTap: () async {
-                //Load entire show, then play
-                List<ShowEpisode> episodes =
-                    await deezerAPI.allShowEpisodes(e.show!.id ?? '');
-                await GetIt.I<AudioPlayerHandler>().playShowEpisode(
-                    e.show!, episodes,
-                    index: episodes.indexWhere((ep) => e.id == ep.id));
+      appBar: FreezerAppBar('Episodes'.i18n),
+      body: ListView.builder(
+        itemCount: episodes.length,
+        itemBuilder: (context, i) {
+          ShowEpisode e = episodes[i];
+          return ShowEpisodeTile(
+            e,
+            trailing: IconButton(
+              icon: Icon(Icons.more_vert, semanticLabel: 'Options'.i18n),
+              onPressed: () {
+                MenuSheet m = MenuSheet();
+                m.defaultShowEpisodeMenu(e.show!, e, context: context);
               },
-            );
-          },
-        ));
+            ),
+            onTap: () async {
+              //Load entire show, then play
+              List<ShowEpisode> episodes = await deezerAPI.allShowEpisodes(
+                e.show!.id ?? '',
+              );
+              await GetIt.I<AudioPlayerHandler>().playShowEpisode(
+                e.show!,
+                episodes,
+                index: episodes.indexWhere((ep) => e.id == ep.id),
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 }

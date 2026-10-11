@@ -38,10 +38,12 @@ analyzer:
   exclude:
     - "**/*.g.dart"
     # workaround for https://github.com/dart-lang/sdk/issues/42910
-    - "Scrobblenaut/**"
+    - "scrobblenaut/**"
     - "custom_navigator/**"
     - "equalizer_flutter/**"
     - "external_path/**"
     - "move_to_background/**"
     - "marquee/**"
+    - build/**
+    - android/**
   #   - "saf/**"

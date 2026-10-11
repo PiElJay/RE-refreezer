@@ -5,13 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
 import 'package:logging/logging.dart';
 
-import '../api/deezer.dart';
+import '../service/lyrics_repository.dart';
 import '../api/definitions.dart';
 import '../service/audio_service.dart';
 import '../settings.dart';
 import '../translations.i18n.dart';
 import '../ui/elements.dart';
-import '../ui/error.dart';
 
 class LyricsScreen extends StatefulWidget {
   final Lyrics? lyrics;
@@ -24,6 +23,8 @@ class LyricsScreen extends StatefulWidget {
 }
 
 class _LyricsScreenState extends State<LyricsScreen> {
+  late String _trackId;
+  int _loadGeneration = 0;
   String appBarTitle = 'Lyrics'.i18n;
   Lyrics? lyrics;
   bool _loading = true;
@@ -38,6 +39,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
   @override
   void initState() {
     super.initState();
+    _trackId = widget.trackId;
     _load();
 
     //Enable visualizer
@@ -47,20 +49,33 @@ class _LyricsScreenState extends State<LyricsScreen> {
 
     //Track change = exit lyrics
     _mediaItemSub = GetIt.I<AudioPlayerHandler>().mediaItem.listen((event) {
-      if (event?.id != widget.trackId) Navigator.of(context).pop();
+      if (event != null && event.id != _trackId && mounted) {
+        _trackId = event.id;
+        _timer?.cancel();
+        _currentIndex = 0;
+        _prevIndex = 0;
+        setState(() {
+          _loading = true;
+          lyrics = null;
+        });
+        _load();
+      }
     });
   }
 
   Future _load() async {
-    if (widget.lyrics?.isLoaded() == true) {
+    final generation = ++_loadGeneration;
+    if (_trackId == widget.trackId && widget.lyrics?.isLoaded() == true) {
       _updateLyricsState(widget.lyrics!);
       return;
     }
 
     try {
-      Lyrics l = await deezerAPI.lyrics(widget.trackId);
+      Lyrics l = await LyricsRepository.load(_trackId);
+      if (!mounted || generation != _loadGeneration) return;
       _updateLyricsState(l);
     } catch (e) {
+      if (!mounted || generation != _loadGeneration) return;
       _timer?.cancel();
       setState(() {
         _error = true;
@@ -80,7 +95,9 @@ class _LyricsScreenState extends State<LyricsScreen> {
     }
 
     if (lyrics.errorMessage != null) {
-      Logger.root.warning('Error loading lyrics for track id ${widget.trackId}: ${lyrics.errorMessage}');
+      Logger.root.warning(
+        'Error loading lyrics for track id ${widget.trackId}: ${lyrics.errorMessage}',
+      );
     }
 
     setState(() {
@@ -92,23 +109,35 @@ class _LyricsScreenState extends State<LyricsScreen> {
   }
 
   void _startSyncTimer() {
-    Timer.periodic(const Duration(milliseconds: 350), (timer) {
-      _timer = timer;
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(milliseconds: 350), (timer) {
+      if (!mounted) return;
       if (_loading) return;
 
       //Update current lyric index
-      setState(() => _currentIndex = lyrics!.syncedLyrics!.lastIndexWhere((lyric) =>
-          (lyric.offset ?? const Duration(seconds: 0)) <= GetIt.I<AudioPlayerHandler>().playbackState.value.position));
+      setState(
+        () => _currentIndex = lyrics!.syncedLyrics!.lastIndexWhere(
+          (lyric) =>
+              (lyric.offset ?? const Duration(seconds: 0)) <=
+              GetIt.I<AudioPlayerHandler>().playbackState.value.position,
+        ),
+      );
 
       //Scroll to current lyric
       if (_currentIndex <= 0) return;
       if (_prevIndex == _currentIndex) return;
       _prevIndex = _currentIndex;
+      if (!_controller.hasClients) return;
       _controller.animateTo(
-          //Lyric height, screen height, appbar height
-          (height * _currentIndex) - (MediaQuery.of(context).size.height / 2) + (height / 2) + 56,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.ease);
+        //Lyric height, screen height, appbar height
+        ((height * _currentIndex) -
+                (MediaQuery.of(context).size.height / 2) +
+                (height / 2) +
+                56)
+            .clamp(0.0, _controller.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.ease,
+      );
     });
   }
 
@@ -122,115 +151,151 @@ class _LyricsScreenState extends State<LyricsScreen> {
       GetIt.I<AudioPlayerHandler>().stopVisualizer();
     }
     //Fix bottom buttons
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-      systemNavigationBarColor: settings.themeData.scaffoldBackgroundColor,
-    ));
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        systemNavigationBarColor: settings.themeData.scaffoldBackgroundColor,
+      ),
+    );
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: FreezerAppBar(appBarTitle),
-        body: Stack(
-          children: [
-            //Visualizer
-            if (settings.lyricsVisualizer)
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: StreamBuilder(
-                    stream: GetIt.I<AudioPlayerHandler>().visualizerStream,
-                    builder: (BuildContext context, AsyncSnapshot snapshot) {
-                      List<double> data = snapshot.data ?? [];
-                      double width = MediaQuery.of(context).size.width / data.length - 0.25;
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: List.generate(
-                            data.length,
-                            (i) => AnimatedContainer(
-                                  duration: const Duration(milliseconds: 130),
-                                  color: Theme.of(context).primaryColor,
-                                  height: data[i] * 100,
-                                  width: width,
-                                )),
-                      );
-                    }),
-              ),
-
-            //Lyrics
-            Padding(
-              padding: EdgeInsets.fromLTRB(0, 0, 0, settings.lyricsVisualizer ? 100 : 0),
-              child: ListView(
-                controller: _controller,
-                children: [
-                  //Shouldn't really happen, empty lyrics have own text
-                  if (_error) const ErrorScreen(),
-
-                  //Loading
-                  if (_loading)
-                    const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [CircularProgressIndicator()],
+      appBar: FreezerAppBar(appBarTitle),
+      body: Stack(
+        children: [
+          //Visualizer
+          if (settings.lyricsVisualizer)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: StreamBuilder(
+                stream: GetIt.I<AudioPlayerHandler>().visualizerStream,
+                builder: (BuildContext context, AsyncSnapshot snapshot) {
+                  List<double> data = snapshot.data ?? [];
+                  double width =
+                      MediaQuery.of(context).size.width / data.length - 0.25;
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: List.generate(
+                      data.length,
+                      (i) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 130),
+                        color: Theme.of(context).primaryColor,
+                        height: data[i] * 100,
+                        width: width,
                       ),
                     ),
+                  );
+                },
+              ),
+            ),
 
-                  // Synced Lyrics
-                  if (lyrics != null && lyrics!.syncedLyrics?.isNotEmpty == true)
-                    ...List.generate(lyrics!.syncedLyrics!.length, (i) {
-                      return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8.0),
-                                color: (_currentIndex == i) ? Colors.grey.withOpacity(0.25) : Colors.transparent,
-                              ),
-                              height: height,
-                              child: Center(
-                                child: GestureDetector(
-                                  onTap: () {
-                                    final offset = lyrics!.syncedLyrics![i].offset;
-                                    if (offset != null) {
-                                      GetIt.I<AudioPlayerHandler>().seek(offset);
-                                    }
-                                  },
-                                  child: Text(
-                                    lyrics!.syncedLyrics![i].text ?? '',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 26.0,
-                                      fontWeight: (_currentIndex == i) ? FontWeight.bold : FontWeight.normal,
-                                    ),
-                                  ),
-                                ),
-                              )));
-                    }),
+          //Lyrics
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              0,
+              0,
+              0,
+              settings.lyricsVisualizer ? 100 : 0,
+            ),
+            child: ListView(
+              controller: _controller,
+              children: [
+                //Shouldn't really happen, empty lyrics have own text
+                if (_error)
+                  ListTile(
+                    title: const Text('Impossibile caricare il testo'),
+                    subtitle: const Text(
+                      'Offline sono disponibili solo i testi già caricati.',
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: _load,
+                    ),
+                  ),
+                if (!_loading &&
+                    !_error &&
+                    (lyrics == null ||
+                        lyrics!.errorMessage != null ||
+                        !lyrics!.isLoaded()))
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('Testo non disponibile su Deezer'),
+                  ),
 
-                  // Unsynced Lyrics
-                  if (lyrics != null && (lyrics!.syncedLyrics?.isEmpty ?? true) && lyrics!.unsyncedLyrics != null)
-                    Padding(
+                //Loading
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [CircularProgressIndicator()],
+                    ),
+                  ),
+
+                // Synced Lyrics
+                if (lyrics != null && lyrics!.syncedLyrics?.isNotEmpty == true)
+                  ...List.generate(lyrics!.syncedLyrics!.length, (i) {
+                    return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: Container(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(8.0),
+                          color: (_currentIndex == i)
+                              ? Colors.grey.withOpacity(0.25)
+                              : Colors.transparent,
                         ),
+                        height: height,
                         child: Center(
-                          child: Text(
-                            lyrics!.unsyncedLyrics!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 26.0,
+                          child: GestureDetector(
+                            onTap: () {
+                              final offset = lyrics!.syncedLyrics![i].offset;
+                              if (offset != null) {
+                                GetIt.I<AudioPlayerHandler>().seek(offset);
+                              }
+                            },
+                            child: Text(
+                              lyrics!.syncedLyrics![i].text ?? '',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 26.0,
+                                fontWeight: (_currentIndex == i)
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
                             ),
                           ),
                         ),
                       ),
+                    );
+                  }),
+
+                // Unsynced Lyrics
+                if (lyrics != null &&
+                    (lyrics!.syncedLyrics?.isEmpty ?? true) &&
+                    lyrics!.unsyncedLyrics != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                      child: Center(
+                        child: Text(
+                          lyrics!.unsyncedLyrics!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 26.0),
+                        ),
+                      ),
                     ),
-                ],
-              ),
-            )
-          ],
-        ));
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

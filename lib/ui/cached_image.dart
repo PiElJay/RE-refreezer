@@ -54,6 +54,14 @@ class CachedImage extends StatefulWidget {
 class _CachedImageState extends State<CachedImage> {
   @override
   Widget build(BuildContext context) {
+    if (widget.url.isEmpty) {
+      return Container(
+        width: widget.width,
+        height: widget.height,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const Center(child: Icon(Icons.music_note_rounded)),
+      );
+    }
     if (widget.rounded) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(8.0),

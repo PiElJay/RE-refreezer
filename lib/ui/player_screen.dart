@@ -2,9 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 
-import 'package:async/async.dart';
 import 'package:audio_service/audio_service.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -12,7 +10,6 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:get_it/get_it.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:marquee/marquee.dart';
-import 'package:palette_generator/palette_generator.dart';
 import 'package:refreezer/utils/navigator_keys.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -23,12 +20,12 @@ import '../api/definitions.dart';
 import '../api/download.dart';
 import '../fonts/refreezer_icons.dart';
 import '../service/audio_service.dart';
-import '../settings.dart';
 import '../translations.i18n.dart';
 import 'cached_image.dart';
 import 'elements.dart';
 import 'lyrics.dart';
 import 'menu.dart';
+import 'modern_player.dart';
 import 'player_bar.dart';
 import 'router.dart';
 import 'settings_screen.dart';
@@ -46,143 +43,8 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  AudioPlayerHandler audioHandler = GetIt.I<AudioPlayerHandler>();
-  LinearGradient? _bgGradient;
-  StreamSubscription? _mediaItemSub;
-  ImageProvider? _blurImage;
-
-  //Calculate background color
-  Future _updateColor() async {
-    if (audioHandler.mediaItem.value == null) return;
-
-    if (!settings.colorGradientBackground && !settings.blurPlayerBackground) {
-      return;
-    }
-
-    //BG Image
-    if (settings.blurPlayerBackground) {
-      setState(() {
-        _blurImage = NetworkImage(
-            audioHandler.mediaItem.value?.extras?['thumb'] ??
-                audioHandler.mediaItem.value?.artUri);
-      });
-    }
-
-    //Run in isolate
-    PaletteGenerator palette = await PaletteGenerator.fromImageProvider(
-        CachedNetworkImageProvider(
-            audioHandler.mediaItem.value?.extras?['thumb'] ??
-                audioHandler.mediaItem.value?.artUri));
-
-    //Update notification
-    if (settings.blurPlayerBackground) {
-      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-          statusBarColor: palette.dominantColor!.color.withOpacity(0.25),
-          systemNavigationBarColor: Color.alphaBlend(
-              palette.dominantColor!.color.withOpacity(0.25),
-              scaffoldBackgroundColor)));
-    }
-
-    //Color gradient
-    if (!settings.blurPlayerBackground) {
-      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-        statusBarColor: palette.dominantColor!.color.withOpacity(0.7),
-      ));
-      setState(() => _bgGradient = LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                palette.dominantColor!.color.withOpacity(0.7),
-                const Color.fromARGB(0, 0, 0, 0)
-              ],
-              stops: const [
-                0.0,
-                0.6
-              ]));
-    }
-  }
-
   @override
-  void initState() {
-    _updateColor;
-    _mediaItemSub = audioHandler.mediaItem.listen((event) {
-      _updateColor();
-    });
-
-    updateColor = _updateColor;
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    _mediaItemSub?.cancel();
-    //Fix bottom buttons
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-        systemNavigationBarColor: settings.themeData.bottomAppBarTheme.color,
-        statusBarColor: Colors.transparent));
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    //Avoid async gap
-    scaffoldBackgroundColor = Theme.of(context).scaffoldBackgroundColor;
-
-    return Scaffold(
-        body: SafeArea(
-            child: Container(
-                decoration: BoxDecoration(
-                    gradient:
-                        settings.blurPlayerBackground ? null : _bgGradient),
-                child: Stack(
-                  children: [
-                    if (settings.blurPlayerBackground)
-                      ClipRect(
-                        child: Container(
-                          decoration: BoxDecoration(
-                              image: DecorationImage(
-                                  image: _blurImage ?? const NetworkImage(''),
-                                  fit: BoxFit.fill,
-                                  colorFilter: ColorFilter.mode(
-                                      Colors.black.withOpacity(0.25),
-                                      BlendMode.dstATop))),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                            child: Container(color: Colors.transparent),
-                          ),
-                        ),
-                      ),
-                    StreamBuilder(
-                      stream: StreamZip(
-                          [audioHandler.playbackState, audioHandler.mediaItem]),
-                      builder: (BuildContext context, AsyncSnapshot snapshot) {
-                        //When disconnected
-                        if (audioHandler.mediaItem.value == null) {
-                          //playerHelper.startService();
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-
-                        return OrientationBuilder(
-                          builder: (context, orientation) {
-                            //Responsive
-                            ScreenUtil.init(context, minTextAdapt: true);
-                            //Landscape
-                            if (orientation == Orientation.landscape) {
-                              // ignore: prefer_const_constructors
-                              return PlayerScreenHorizontal();
-                            }
-                            //Portrait
-                            // ignore: prefer_const_constructors
-                            return PlayerScreenVertical();
-                          },
-                        );
-                      },
-                    ),
-                  ],
-                ))));
-  }
+  Widget build(BuildContext context) => const ModernPlayer();
 }
 
 //Landscape
@@ -204,11 +66,7 @@ class _PlayerScreenHorizontalState extends State<PlayerScreenHorizontal> {
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 2),
           child: SizedBox(
             width: ScreenUtil().setWidth(160),
-            child: const Stack(
-              children: <Widget>[
-                BigAlbumArt(),
-              ],
-            ),
+            child: const Stack(children: <Widget>[BigAlbumArt()]),
           ),
         ),
         //Right side
@@ -219,50 +77,54 @@ class _PlayerScreenHorizontalState extends State<PlayerScreenHorizontal> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
               Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-                  child: PlayerScreenTopRow(
-                      textSize: ScreenUtil().setSp(28),
-                      iconSize: ScreenUtil().setSp(38),
-                      textWidth: ScreenUtil().setWidth(150),
-                      short: false)),
+                padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+                child: PlayerScreenTopRow(
+                  textSize: ScreenUtil().setSp(28),
+                  iconSize: ScreenUtil().setSp(38),
+                  textWidth: ScreenUtil().setWidth(150),
+                  short: false,
+                ),
+              ),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   SizedBox(
-                      height: ScreenUtil().setSp(50),
-                      child: GetIt.I<AudioPlayerHandler>()
-                                  .mediaItem
-                                  .value!
-                                  .displayTitle!
-                                  .length >=
-                              22
-                          ? Marquee(
-                              text: GetIt.I<AudioPlayerHandler>()
-                                  .mediaItem
-                                  .value!
-                                  .displayTitle!,
-                              style: TextStyle(
-                                  fontSize: ScreenUtil().setSp(40),
-                                  fontWeight: FontWeight.bold),
-                              blankSpace: 32.0,
-                              startPadding: 10.0,
-                              accelerationDuration: const Duration(seconds: 1),
-                              pauseAfterRound: const Duration(seconds: 2),
-                            )
-                          : Text(
-                              GetIt.I<AudioPlayerHandler>()
-                                  .mediaItem
-                                  .value!
-                                  .displayTitle!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: ScreenUtil().setSp(40),
-                                  fontWeight: FontWeight.bold),
-                            )),
-                  Container(
-                    height: 4,
+                    height: ScreenUtil().setSp(50),
+                    child:
+                        GetIt.I<AudioPlayerHandler>()
+                                .mediaItem
+                                .value!
+                                .displayTitle!
+                                .length >=
+                            22
+                        ? Marquee(
+                            text: GetIt.I<AudioPlayerHandler>()
+                                .mediaItem
+                                .value!
+                                .displayTitle!,
+                            style: TextStyle(
+                              fontSize: ScreenUtil().setSp(40),
+                              fontWeight: FontWeight.bold,
+                            ),
+                            blankSpace: 32.0,
+                            startPadding: 10.0,
+                            accelerationDuration: const Duration(seconds: 1),
+                            pauseAfterRound: const Duration(seconds: 2),
+                          )
+                        : Text(
+                            GetIt.I<AudioPlayerHandler>()
+                                .mediaItem
+                                .value!
+                                .displayTitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: ScreenUtil().setSp(40),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
+                  Container(height: 4),
                   Text(
                     GetIt.I<AudioPlayerHandler>()
                             .mediaItem
@@ -285,43 +147,49 @@ class _PlayerScreenHorizontalState extends State<PlayerScreenHorizontal> {
               ),
               PlaybackControls(ScreenUtil().setSp(60)),
               Padding(
-                  //padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: <Widget>[
-                        LyricsIconButton(12, afterOnPressed: updateColor),
-                        IconButton(
-                          icon: Icon(
-                            Icons.file_download,
-                            size: ScreenUtil().setWidth(12),
-                            semanticLabel: 'Download'.i18n,
-                          ),
-                          onPressed: () async {
-                            Track t = Track.fromMediaItem(
-                                GetIt.I<AudioPlayerHandler>().mediaItem.value!);
-                            if (await downloadManager.addOfflineTrack(t,
-                                    private: false, isSingleton: true) !=
-                                false) {
-                              Fluttertoast.showToast(
-                                  msg: 'Downloads added!'.i18n,
-                                  gravity: ToastGravity.BOTTOM,
-                                  toastLength: Toast.LENGTH_SHORT);
-                            }
-                          },
+                //padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      LyricsIconButton(12, afterOnPressed: updateColor),
+                      IconButton(
+                        icon: Icon(
+                          Icons.file_download,
+                          size: ScreenUtil().setWidth(12),
+                          semanticLabel: 'Download'.i18n,
                         ),
-                        const QualityInfoWidget(),
-                        RepeatButton(ScreenUtil().setWidth(12)),
-                        const PlayerMenuButton()
-                      ],
-                    ),
-                  ))
+                        onPressed: () async {
+                          Track t = Track.fromMediaItem(
+                            GetIt.I<AudioPlayerHandler>().mediaItem.value!,
+                          );
+                          if (await downloadManager.addOfflineTrack(
+                                t,
+                                private: false,
+                                isSingleton: true,
+                              ) !=
+                              false) {
+                            Fluttertoast.showToast(
+                              msg: 'Downloads added!'.i18n,
+                              gravity: ToastGravity.BOTTOM,
+                              toastLength: Toast.LENGTH_SHORT,
+                            );
+                          }
+                        },
+                      ),
+                      const QualityInfoWidget(),
+                      RepeatButton(ScreenUtil().setWidth(12)),
+                      const PlayerMenuButton(),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
-        )
+        ),
       ],
     );
   }
@@ -343,21 +211,19 @@ class _PlayerScreenVerticalState extends State<PlayerScreenVertical> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: <Widget>[
         Padding(
-            padding: const EdgeInsets.fromLTRB(0, 4, 16, 0),
-            child: PlayerScreenTopRow(
-                textSize: ScreenUtil().setSp(14),
-                iconSize: ScreenUtil().setSp(18),
-                textWidth: ScreenUtil().setWidth(350),
-                short: true)),
+          padding: const EdgeInsets.fromLTRB(0, 4, 16, 0),
+          child: PlayerScreenTopRow(
+            textSize: ScreenUtil().setSp(14),
+            iconSize: ScreenUtil().setSp(18),
+            textWidth: ScreenUtil().setWidth(350),
+            short: true,
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
           child: SizedBox(
             height: ScreenUtil().setHeight(360),
-            child: const Stack(
-              children: <Widget>[
-                BigAlbumArt(),
-              ],
-            ),
+            child: const Stack(children: <Widget>[BigAlbumArt()]),
           ),
         ),
         Container(height: 4.0),
@@ -365,43 +231,46 @@ class _PlayerScreenVerticalState extends State<PlayerScreenVertical> {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             SizedBox(
-                height: ScreenUtil().setSp(26),
-                child: (GetIt.I<AudioPlayerHandler>()
-                                    .mediaItem
-                                    .value
-                                    ?.displayTitle ??
-                                '')
-                            .length >=
-                        26
-                    ? Marquee(
-                        text: GetIt.I<AudioPlayerHandler>()
-                                .mediaItem
-                                .value
-                                ?.displayTitle ??
-                            '',
-                        style: TextStyle(
-                            fontSize: ScreenUtil().setSp(22),
-                            fontWeight: FontWeight.bold),
-                        blankSpace: 32.0,
-                        startPadding: 10.0,
-                        accelerationDuration: const Duration(seconds: 1),
-                        pauseAfterRound: const Duration(seconds: 2),
-                      )
-                    : Text(
-                        GetIt.I<AudioPlayerHandler>()
-                                .mediaItem
-                                .value
-                                ?.displayTitle ??
-                            '',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: ScreenUtil().setSp(22),
-                            fontWeight: FontWeight.bold),
-                      )),
-            Container(
-              height: 4,
+              height: ScreenUtil().setSp(26),
+              child:
+                  (GetIt.I<AudioPlayerHandler>()
+                                  .mediaItem
+                                  .value
+                                  ?.displayTitle ??
+                              '')
+                          .length >=
+                      26
+                  ? Marquee(
+                      text:
+                          GetIt.I<AudioPlayerHandler>()
+                              .mediaItem
+                              .value
+                              ?.displayTitle ??
+                          '',
+                      style: TextStyle(
+                        fontSize: ScreenUtil().setSp(22),
+                        fontWeight: FontWeight.bold,
+                      ),
+                      blankSpace: 32.0,
+                      startPadding: 10.0,
+                      accelerationDuration: const Duration(seconds: 1),
+                      pauseAfterRound: const Duration(seconds: 2),
+                    )
+                  : Text(
+                      GetIt.I<AudioPlayerHandler>()
+                              .mediaItem
+                              .value
+                              ?.displayTitle ??
+                          '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: ScreenUtil().setSp(22),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
             ),
+            Container(height: 4),
             Text(
               GetIt.I<AudioPlayerHandler>().mediaItem.value?.displaySubtitle ??
                   '',
@@ -432,23 +301,28 @@ class _PlayerScreenVerticalState extends State<PlayerScreenVertical> {
                 ),
                 onPressed: () async {
                   Track t = Track.fromMediaItem(
-                      GetIt.I<AudioPlayerHandler>().mediaItem.value!);
-                  if (await downloadManager.addOfflineTrack(t,
-                          private: false, isSingleton: true) !=
+                    GetIt.I<AudioPlayerHandler>().mediaItem.value!,
+                  );
+                  if (await downloadManager.addOfflineTrack(
+                        t,
+                        private: false,
+                        isSingleton: true,
+                      ) !=
                       false) {
                     Fluttertoast.showToast(
-                        msg: 'Downloads added!'.i18n,
-                        gravity: ToastGravity.BOTTOM,
-                        toastLength: Toast.LENGTH_SHORT);
+                      msg: 'Downloads added!'.i18n,
+                      gravity: ToastGravity.BOTTOM,
+                      toastLength: Toast.LENGTH_SHORT,
+                    );
                   }
                 },
               ),
               const QualityInfoWidget(),
               RepeatButton(ScreenUtil().setWidth(20)),
-              const PlayerMenuButton()
+              const PlayerMenuButton(),
             ],
           ),
-        )
+        ),
       ],
     );
   }
@@ -469,8 +343,9 @@ class _QualityInfoWidgetState extends State<QualityInfoWidget> {
   //Load data from native
   void _load() async {
     if (audioHandler.mediaItem.value == null) return;
-    Map? data = await DownloadManager.platform.invokeMethod(
-        'getStreamInfo', {'id': audioHandler.mediaItem.value!.id});
+    Map? data = await DownloadManager.platform.invokeMethod('getStreamInfo', {
+      'id': audioHandler.mediaItem.value!.id,
+    });
     //N/A
     if (data == null) {
       if (mounted) setState(() => value = '');
@@ -513,7 +388,8 @@ class _QualityInfoWidgetState extends State<QualityInfoWidget> {
         child: Text(value),
         onPressed: () {
           Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const QualitySettings()));
+            MaterialPageRoute(builder: (context) => const QualitySettings()),
+          );
         },
       );
     }
@@ -531,18 +407,15 @@ class LyricsIconButton extends StatelessWidget {
   final double width;
   final Function? afterOnPressed;
 
-  const LyricsIconButton(
-    this.width, {
-    super.key,
-    this.afterOnPressed,
-  });
+  const LyricsIconButton(this.width, {super.key, this.afterOnPressed});
 
   @override
   Widget build(BuildContext context) {
-    Track track =
-        Track.fromMediaItem(GetIt.I<AudioPlayerHandler>().mediaItem.value!);
+    Track track = Track.fromMediaItem(
+      GetIt.I<AudioPlayerHandler>().mediaItem.value!,
+    );
 
-    bool isEnabled = (track.lyrics?.id ?? '0') != '0';
+    bool isEnabled = track.id != null;
 
     return Opacity(
       opacity: isEnabled
@@ -558,11 +431,17 @@ class LyricsIconButton extends StatelessWidget {
         onPressed: isEnabled
             ? () async {
                 //Fix bottom buttons
-                SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-                    statusBarColor: Colors.transparent));
+                SystemChrome.setSystemUIOverlayStyle(
+                  const SystemUiOverlayStyle(
+                    statusBarColor: Colors.transparent,
+                  ),
+                );
 
-                await Navigator.of(context).push(MaterialPageRoute(
-                    builder: (context) => LyricsScreen(trackId: track.id!)));
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => LyricsScreen(trackId: track.id!),
+                  ),
+                );
 
                 if (afterOnPressed != null) {
                   afterOnPressed!();
@@ -587,26 +466,34 @@ class PlayerMenuButton extends StatelessWidget {
         semanticLabel: 'Options'.i18n,
       ),
       onPressed: () {
-        Track t =
-            Track.fromMediaItem(GetIt.I<AudioPlayerHandler>().mediaItem.value!);
-        MenuSheet m = MenuSheet(navigateCallback: () {
-          Navigator.of(context).pop();
-        });
+        Track t = Track.fromMediaItem(
+          GetIt.I<AudioPlayerHandler>().mediaItem.value!,
+        );
+        MenuSheet m = MenuSheet(
+          navigateCallback: () {
+            Navigator.of(context).pop();
+          },
+        );
         if (GetIt.I<AudioPlayerHandler>().mediaItem.value!.extras?['show'] ==
             null) {
-          m.defaultTrackMenu(t,
-              context: context,
-              options: [m.sleepTimer(context), m.wakelock(context)]);
+          m.defaultTrackMenu(
+            t,
+            context: context,
+            options: [m.sleepTimer(context), m.wakelock(context)],
+          );
         } else {
           m.defaultShowEpisodeMenu(
-              Show.fromJson(jsonDecode(GetIt.I<AudioPlayerHandler>()
-                  .mediaItem
-                  .value!
-                  .extras?['show'])),
-              ShowEpisode.fromMediaItem(
-                  GetIt.I<AudioPlayerHandler>().mediaItem.value!),
-              context: context,
-              options: [m.sleepTimer(context), m.wakelock(context)]);
+            Show.fromJson(
+              jsonDecode(
+                GetIt.I<AudioPlayerHandler>().mediaItem.value!.extras?['show'],
+              ),
+            ),
+            ShowEpisode.fromMediaItem(
+              GetIt.I<AudioPlayerHandler>().mediaItem.value!,
+            ),
+            context: context,
+            options: [m.sleepTimer(context), m.wakelock(context)],
+          );
         }
       },
     );
@@ -671,7 +558,8 @@ class _PlaybackControlsState extends State<PlaybackControls> {
   AudioPlayerHandler audioHandler = GetIt.I<AudioPlayerHandler>();
   Icon get libraryIcon {
     if (cache.checkTrackFavorite(
-        Track.fromMediaItem(audioHandler.mediaItem.value!))) {
+      Track.fromMediaItem(audioHandler.mediaItem.value!),
+    )) {
       return Icon(
         Icons.favorite,
         size: widget.iconSize * 0.44,
@@ -694,17 +582,18 @@ class _PlaybackControlsState extends State<PlaybackControls> {
         mainAxisSize: MainAxisSize.max,
         children: [
           IconButton(
-              icon: Icon(
-                Icons.sentiment_very_dissatisfied,
-                size: widget.iconSize * 0.44,
-                semanticLabel: 'Dislike'.i18n,
-              ),
-              onPressed: () async {
-                await deezerAPI.dislikeTrack(audioHandler.mediaItem.value!.id);
-                if (audioHandler.queueState.hasNext) {
-                  audioHandler.skipToNext();
-                }
-              }),
+            icon: Icon(
+              Icons.sentiment_very_dissatisfied,
+              size: widget.iconSize * 0.44,
+              semanticLabel: 'Dislike'.i18n,
+            ),
+            onPressed: () async {
+              await deezerAPI.dislikeTrack(audioHandler.mediaItem.value!.id);
+              if (audioHandler.queueState.hasNext) {
+                audioHandler.skipToNext();
+              }
+            },
+          ),
           PrevNextButton(widget.iconSize, prev: true),
           PlayPauseButton(widget.iconSize * 1.25),
           PrevNextButton(widget.iconSize),
@@ -714,23 +603,32 @@ class _PlaybackControlsState extends State<PlaybackControls> {
               cache.libraryTracks ??= [];
 
               if (cache.checkTrackFavorite(
-                  Track.fromMediaItem(audioHandler.mediaItem.value!))) {
+                Track.fromMediaItem(audioHandler.mediaItem.value!),
+              )) {
                 //Remove from library
-                setState(() => cache.libraryTracks
-                    ?.remove(audioHandler.mediaItem.value!.id));
-                await deezerAPI
-                    .removeFavorite(audioHandler.mediaItem.value!.id);
+                setState(
+                  () => cache.libraryTracks?.remove(
+                    audioHandler.mediaItem.value!.id,
+                  ),
+                );
+                await deezerAPI.removeFavorite(
+                  audioHandler.mediaItem.value!.id,
+                );
                 await cache.save();
               } else {
                 //Add
-                setState(() =>
-                    cache.libraryTracks?.add(audioHandler.mediaItem.value!.id));
-                await deezerAPI
-                    .addFavoriteTrack(audioHandler.mediaItem.value!.id);
+                setState(
+                  () => cache.libraryTracks?.add(
+                    audioHandler.mediaItem.value!.id,
+                  ),
+                );
+                await deezerAPI.addFavoriteTrack(
+                  audioHandler.mediaItem.value!.id,
+                );
                 await cache.save();
               }
             },
-          )
+          ),
         ],
       ),
     );
@@ -755,27 +653,25 @@ class _BigAlbumArtState extends State<BigAlbumArt> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(
-      initialPage: audioHandler.currentIndex,
-    );
+    _pageController = PageController(initialPage: audioHandler.currentIndex);
 
     _imageList = _getImageList(audioHandler.queue.value);
 
     _currentItemAndQueueSub =
         Rx.combineLatest2<MediaItem?, List<MediaItem>, void>(
-      audioHandler.mediaItem,
-      audioHandler.queue,
-      (mediaItem, queue) {
-        if (queue.isNotEmpty) {
-          _handleMediaItemChange(mediaItem);
-          if (_didQueueChange(queue)) {
-            setState(() {
-              _imageList = _getImageList(queue);
-            });
-          }
-        }
-      },
-    ).listen((_) {});
+          audioHandler.mediaItem,
+          audioHandler.queue,
+          (mediaItem, queue) {
+            if (queue.isNotEmpty) {
+              _handleMediaItemChange(mediaItem);
+              if (_didQueueChange(queue)) {
+                setState(() {
+                  _imageList = _getImageList(queue);
+                });
+              }
+            }
+          },
+        ).listen((_) {});
 
     WidgetsBinding.instance.addObserver(this);
   }
@@ -803,8 +699,9 @@ class _BigAlbumArtState extends State<BigAlbumArt> with WidgetsBindingObserver {
 
   void _handleMediaItemChange(MediaItem? item) async {
     final targetItemId = item?.id ?? '';
-    final targetPage =
-        audioHandler.queue.value.indexWhere((item) => item.id == targetItemId);
+    final targetPage = audioHandler.queue.value.indexWhere(
+      (item) => item.id == targetItemId,
+    );
     if (targetPage == -1) return;
 
     // No need to animating to the same page
@@ -815,13 +712,13 @@ class _BigAlbumArtState extends State<BigAlbumArt> with WidgetsBindingObserver {
       _changeTrackOnPageChange = false;
       await _pageController
           .animateToPage(
-        targetPage,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      )
+            targetPage,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          )
           .then((_) {
-        _changeTrackOnPageChange = true;
-      });
+            _changeTrackOnPageChange = true;
+          });
     } else {
       // Widget is not visible, jump to the target page without animation
       _changeTrackOnPageChange = false;
@@ -885,8 +782,13 @@ class PlayerScreenTopRow extends StatelessWidget {
   final double? textWidth;
   final bool? short;
   final GlobalKey iconButtonKey = GlobalKey();
-  PlayerScreenTopRow(
-      {super.key, this.textSize, this.iconSize, this.textWidth, this.short});
+  PlayerScreenTopRow({
+    super.key,
+    this.textSize,
+    this.iconSize,
+    this.textWidth,
+    this.short,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -896,9 +798,7 @@ class PlayerScreenTopRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
         IconButton(
-          icon: const Icon(
-            Icons.keyboard_arrow_down_sharp,
-          ),
+          icon: const Icon(Icons.keyboard_arrow_down_sharp),
           iconSize: iconSize ?? ScreenUtil().setSp(52),
           splashRadius: iconSize ?? ScreenUtil().setWidth(52),
           onPressed: () async {
@@ -913,8 +813,8 @@ class PlayerScreenTopRow extends StatelessWidget {
               (short ?? false)
                   ? (GetIt.I<AudioPlayerHandler>().queueSource?.text ?? '')
                   : 'Playing from:'.i18n +
-                      ' ' +
-                      (GetIt.I<AudioPlayerHandler>().queueSource?.text ?? ''),
+                        ' ' +
+                        (GetIt.I<AudioPlayerHandler>().queueSource?.text ?? ''),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.left,
@@ -934,19 +834,24 @@ class PlayerScreenTopRow extends StatelessWidget {
           onPressed: () async {
             //Fix bottom buttons (Not needed anymore?)
             SystemChrome.setSystemUIOverlayStyle(
-                const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
+              const SystemUiOverlayStyle(statusBarColor: Colors.transparent),
+            );
 
             // Calculate the center of the icon
             final RenderBox buttonRenderBox =
                 iconButtonKey.currentContext!.findRenderObject() as RenderBox;
-            final Offset buttonOffset = buttonRenderBox
-                .localToGlobal(buttonRenderBox.size.center(Offset.zero));
+            final Offset buttonOffset = buttonRenderBox.localToGlobal(
+              buttonRenderBox.size.center(Offset.zero),
+            );
             //Navigate
             //await Navigator.of(context).push(MaterialPageRoute(builder: (context) => QueueScreen()));
-            await Navigator.of(context).push(CircularExpansionRoute(
+            await Navigator.of(context).push(
+              CircularExpansionRoute(
                 widget: const QueueScreen(),
                 //centerAlignment: Alignment.topRight,
-                centerOffset: buttonOffset)); // Expand from icon
+                centerOffset: buttonOffset,
+              ),
+            ); // Expand from icon
             //Fix colors
             updateColor();
           },
@@ -971,8 +876,8 @@ class _SeekBarState extends State<SeekBar> {
 
   double get position {
     if (_seeking) return _pos;
-    double p =
-        audioHandler.playbackState.value.position.inMilliseconds.toDouble();
+    double p = audioHandler.playbackState.value.position.inMilliseconds
+        .toDouble();
     if (p > duration) return duration;
     return p;
   }
@@ -997,21 +902,25 @@ class _SeekBarState extends State<SeekBar> {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 0.0, horizontal: 24.0),
+              padding: const EdgeInsets.symmetric(
+                vertical: 0.0,
+                horizontal: 24.0,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: <Widget>[
                   Text(
                     _timeString(position),
                     style: TextStyle(
-                        fontSize: ScreenUtil().setSp(widget.relativeTextSize)),
+                      fontSize: ScreenUtil().setSp(widget.relativeTextSize),
+                    ),
                   ),
                   Text(
                     _timeString(duration),
                     style: TextStyle(
-                        fontSize: ScreenUtil().setSp(widget.relativeTextSize)),
-                  )
+                      fontSize: ScreenUtil().setSp(widget.relativeTextSize),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1019,9 +928,9 @@ class _SeekBarState extends State<SeekBar> {
               height: 32.0,
               child: Slider(
                 focusNode: FocusNode(
-                    canRequestFocus: false,
-                    skipTraversal:
-                        true), // Don't focus on Slider - it doesn't work (and not needed)
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                ), // Don't focus on Slider - it doesn't work (and not needed)
                 value: position,
                 max: duration,
                 onChangeStart: (double d) {
@@ -1043,7 +952,7 @@ class _SeekBarState extends State<SeekBar> {
                   });
                 },
               ),
-            )
+            ),
           ],
         );
       },
@@ -1114,8 +1023,9 @@ class _QueueScreenState extends State<QueueScreen> with WidgetsBindingObserver {
                 //cons.shuffle,
                 ReFreezerIcons.shuffle,
                 semanticLabel: 'Shuffle'.i18n,
-                color:
-                    shuffleModeEnabled ? Theme.of(context).primaryColor : null,
+                color: shuffleModeEnabled
+                    ? Theme.of(context).primaryColor
+                    : null,
               ),
               onPressed: () async {
                 await audioHandler.toggleShuffle();
@@ -1125,20 +1035,19 @@ class _QueueScreenState extends State<QueueScreen> with WidgetsBindingObserver {
           Padding(
             padding: const EdgeInsets.fromLTRB(0, 4, 16, 0),
             child: IconButton(
-              icon: Icon(
-                Icons.close,
-                semanticLabel: 'Clear all'.i18n,
-              ),
+              icon: Icon(Icons.close, semanticLabel: 'Clear all'.i18n),
               onPressed: () async {
                 await audioHandler.clearQueue();
-                mainNavigatorKey.currentState!
-                    .popUntil((route) => route.isFirst);
+                mainNavigatorKey.currentState!.popUntil(
+                  (route) => route.isFirst,
+                );
               },
             ),
-          )
+          ),
         ],
       ),
-      body: shuffleModeEnabled // No manual re-ordring in shuffle mode
+      body:
+          shuffleModeEnabled // No manual re-ordring in shuffle mode
           ? ListView.builder(
               controller: _scrollController,
               itemCount: queueState.queue.length,
@@ -1151,12 +1060,9 @@ class _QueueScreenState extends State<QueueScreen> with WidgetsBindingObserver {
                     await audioHandler.skipToQueueItem(index);
                     if (context.mounted) Navigator.of(context).pop();
                   },
-                  key: Key(mediaItem.id),
+                  key: Key('${mediaItem.id}_$index'),
                   trailing: IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      semanticLabel: 'Close'.i18n,
-                    ),
+                    icon: Icon(Icons.close, semanticLabel: 'Close'.i18n),
                     onPressed: () async {
                       await audioHandler.removeQueueItem(mediaItem);
                     },
@@ -1184,10 +1090,7 @@ class _QueueScreenState extends State<QueueScreen> with WidgetsBindingObserver {
                   },
                   key: Key('${mediaItem.id}_$index'),
                   trailing: IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      semanticLabel: 'Close'.i18n,
-                    ),
+                    icon: Icon(Icons.close, semanticLabel: 'Close'.i18n),
                     onPressed: () async {
                       await audioHandler.removeQueueItem(mediaItem);
                     },

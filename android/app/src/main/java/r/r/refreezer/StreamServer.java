@@ -104,6 +104,15 @@ public class StreamServer {
                     }
                 }
 
+                // A queue may predate its downloads: check the local file for every request.
+                if (session.getParameters().get("id") != null && !session.getParameters().containsKey("forceOnline")) {
+                    String requestedId = session.getParameters().get("id").get(0);
+                    File local = new File(offlinePath, requestedId);
+                    if (local.isFile() && local.length() > 0) {
+                        return offlineStream(session, startBytes, end, isRanged);
+                    }
+                }
+
                 //Check query parameters
                 if (session.getParameters().keySet().size() < 6) {
                     //Play offline

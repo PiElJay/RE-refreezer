@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../api/download.dart';
+import 'offline_tracks.dart';
 import '../translations.i18n.dart';
 import 'elements.dart';
 import 'cached_image.dart';
@@ -33,6 +34,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   Future _load() async {
     //Load downloads
     List<Download> d = await downloadManager.getDownloads();
+    if (!mounted) return;
     setState(() {
       downloads = d;
     });
@@ -44,9 +46,10 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
     //Subscribe to state update
     _stateSubscription = downloadManager.serviceEvents.stream.listen((e) {
+      if (!mounted) return;
       //State change = update
       if (e['action'] == 'onStateChange') {
-        setState(() => downloadManager.running = downloadManager.running);
+        _load();
       }
       //Progress change
       if (e['action'] == 'onProgress') {
@@ -106,6 +109,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         ),
         body: ListView(
           children: [
+            ListTile(leading: const Icon(Icons.offline_pin_rounded),
+              title: const Text('Brani disponibili offline'),
+              subtitle: const Text('La tua musica, anche senza connessione'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OfflineTracksScreen()))),
             //Now downloading
             Container(height: 2.0),
             Column(

@@ -81,24 +81,26 @@ class Settings {
   late String singletonFilename;
   @JsonKey(defaultValue: 1400)
   late int albumArtResolution;
-  @JsonKey(defaultValue: [
-    'title',
-    'album',
-    'artist',
-    'track',
-    'disc',
-    'albumArtist',
-    'date',
-    'label',
-    'isrc',
-    'upc',
-    'trackTotal',
-    'bpm',
-    'lyrics',
-    'genre',
-    'contributors',
-    'art'
-  ])
+  @JsonKey(
+    defaultValue: [
+      'title',
+      'album',
+      'artist',
+      'track',
+      'disc',
+      'albumArtist',
+      'date',
+      'label',
+      'isrc',
+      'upc',
+      'trackTotal',
+      'bpm',
+      'lyrics',
+      'genre',
+      'contributors',
+      'art',
+    ],
+  )
   late List<String> tags;
 
   //Appearance
@@ -119,10 +121,11 @@ class Settings {
 
   //Colors
   @JsonKey(toJson: _colorToJson, fromJson: _colorFromJson)
-  Color primaryColor = Colors.blue;
+  Color primaryColor = const Color(0xffa77aff);
 
   static _colorToJson(Color c) => c.value;
-  static _colorFromJson(int? v) => v == null ? Colors.blue : Color(v);
+  static _colorFromJson(int? v) =>
+      v == null ? const Color(0xffa77aff) : Color(v);
 
   @JsonKey(defaultValue: false)
   bool useArtColor = false;
@@ -157,7 +160,7 @@ class Settings {
 
   Settings({this.downloadPath, this.arl});
 
-  ThemeData get themeData {
+  ThemeData get _baseThemeData {
     //System theme
     if (useSystemTheme) {
       if (PlatformDispatcher.instance.platformBrightness == Brightness.light) {
@@ -169,6 +172,59 @@ class Settings {
     }
     //Theme
     return _themeData[theme] ?? ThemeData();
+  }
+
+  ThemeData get themeData {
+    final base = _baseThemeData;
+    final dark = base.brightness == Brightness.dark;
+    final surface = dark ? const Color(0xff191922) : const Color(0xfff2f0f7);
+    final scheme = ColorScheme.fromSeed(
+      seedColor: primaryColor,
+      brightness: base.brightness,
+      surface: surface,
+    );
+    return base.copyWith(
+      useMaterial3: true,
+      scaffoldBackgroundColor: dark
+          ? const Color(0xff0c0c12)
+          : const Color(0xfffaf9fc),
+      colorScheme: scheme,
+      appBarTheme: AppBarTheme(
+        backgroundColor: dark ? const Color(0xff0c0c12) : Colors.white,
+        elevation: 0,
+        centerTitle: false,
+        titleTextStyle: base.textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      bottomAppBarTheme: BottomAppBarThemeData(color: surface),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surface,
+        showDragHandle: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      listTileTheme: const ListTileThemeData(
+        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      ),
+      dividerTheme: DividerThemeData(
+        color: scheme.outlineVariant.withOpacity(0.3),
+        thickness: 1,
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surface,
+        indicatorColor: scheme.primaryContainer,
+      ),
+    );
   }
 
   //Get all available fonts
@@ -188,8 +244,9 @@ class Settings {
 
   Future<void> updateAppIcon(String iconKey) async {
     try {
-      LauncherIcon icon =
-          LauncherIcon.values.firstWhere((e) => e.key == iconKey);
+      LauncherIcon icon = LauncherIcon.values.firstWhere(
+        (e) => e.key == iconKey,
+      );
       await AppIconChanger.changeIcon(icon);
       appIcon = iconKey;
       await save();
@@ -202,11 +259,13 @@ class Settings {
     useArtColor = v;
     if (v) {
       //On media item change set color
-      _useArtColorSub =
-          GetIt.I<AudioPlayerHandler>().mediaItem.listen((event) async {
+      _useArtColorSub = GetIt.I<AudioPlayerHandler>().mediaItem.listen((
+        event,
+      ) async {
         if (event == null || event.artUri == null) return;
-        primaryColor =
-            await imagesDatabase.getPrimaryColor(event.artUri.toString());
+        primaryColor = await imagesDatabase.getPrimaryColor(
+          event.artUri.toString(),
+        );
         updateTheme();
       });
     } else {
@@ -217,9 +276,10 @@ class Settings {
   }
 
   SliderThemeData get _sliderTheme => SliderThemeData(
-      thumbColor: primaryColor,
-      activeTrackColor: primaryColor,
-      inactiveTrackColor: primaryColor.withOpacity(0.2));
+    thumbColor: primaryColor,
+    activeTrackColor: primaryColor,
+    inactiveTrackColor: primaryColor.withOpacity(0.2),
+  );
 
   //Load settings/init
   Future<Settings> loadSettings() async {
@@ -232,7 +292,8 @@ class Settings {
     Settings s = Settings.fromJson({});
     //Set default path, because async
     s.downloadPath = (await ExternalPath.getExternalStoragePublicDirectory(
-        ExternalPath.DIRECTORY_MUSIC));
+      ExternalPath.DIRECTORY_MUSIC,
+    ));
     s.save();
     return s;
   }
@@ -281,271 +342,304 @@ class Settings {
   static const deezerBottom = Color(0xFF1b1714);
   TextTheme? get textTheme => (font == 'Deezer')
       ? null
-      : GoogleFonts.getTextTheme(font,
-          isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme);
+      : GoogleFonts.getTextTheme(
+          font,
+          isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
+        );
   String? get _fontFamily => (font == 'Deezer') ? 'MabryPro' : null;
 
   //Overrides for the non-deprecated buttons to look like the old ones
   OutlinedButtonThemeData get outlinedButtonTheme => OutlinedButtonThemeData(
-          style: ButtonStyle(
-        foregroundColor:
-            WidgetStateProperty.all(isDark ? Colors.white : Colors.black),
-        side: WidgetStateProperty.all(BorderSide(color: Colors.grey.shade800)),
-      ));
+    style: ButtonStyle(
+      foregroundColor: WidgetStateProperty.all(
+        isDark ? Colors.white : Colors.black,
+      ),
+      side: WidgetStateProperty.all(BorderSide(color: Colors.grey.shade800)),
+    ),
+  );
   TextButtonThemeData get textButtonTheme => TextButtonThemeData(
-          style: ButtonStyle(
-        foregroundColor:
-            WidgetStateProperty.all(isDark ? Colors.white : Colors.black),
-      ));
+    style: ButtonStyle(
+      foregroundColor: WidgetStateProperty.all(
+        isDark ? Colors.white : Colors.black,
+      ),
+    ),
+  );
 
   Map<Themes, ThemeData> get _themeData => {
-        Themes.Light: ThemeData(
-            useMaterial3: false,
-            brightness: Brightness.light,
-            textTheme: textTheme,
-            fontFamily: _fontFamily,
-            primaryColor: primaryColor,
-            sliderTheme: _sliderTheme,
-            outlinedButtonTheme: outlinedButtonTheme,
-            textButtonTheme: textButtonTheme,
-            colorScheme: ColorScheme.fromSwatch().copyWith(
-                secondary: primaryColor, brightness: Brightness.light),
-            checkboxTheme: CheckboxThemeData(
-              fillColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            radioTheme: RadioThemeData(
-              fillColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            switchTheme: SwitchThemeData(
-              thumbColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-              trackColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            bottomAppBarTheme:
-                const BottomAppBarTheme(color: Color(0xfff5f5f5))),
-        Themes.Dark: ThemeData(
-            useMaterial3: false,
-            brightness: Brightness.dark,
-            textTheme: textTheme,
-            fontFamily: _fontFamily,
-            primaryColor: primaryColor,
-            sliderTheme: _sliderTheme,
-            outlinedButtonTheme: outlinedButtonTheme,
-            textButtonTheme: textButtonTheme,
-            colorScheme: ColorScheme.fromSwatch()
-                .copyWith(secondary: primaryColor, brightness: Brightness.dark),
-            checkboxTheme: CheckboxThemeData(
-              fillColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            radioTheme: RadioThemeData(
-              fillColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            switchTheme: SwitchThemeData(
-              thumbColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-              trackColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            bottomAppBarTheme:
-                const BottomAppBarTheme(color: Color(0xff424242))),
-        Themes.Deezer: ThemeData(
-            useMaterial3: false,
-            brightness: Brightness.dark,
-            textTheme: textTheme,
-            fontFamily: _fontFamily,
-            primaryColor: primaryColor,
-            sliderTheme: _sliderTheme,
-            scaffoldBackgroundColor: deezerBg,
-            bottomSheetTheme:
-                const BottomSheetThemeData(backgroundColor: deezerBottom),
-            cardColor: deezerBg,
-            outlinedButtonTheme: outlinedButtonTheme,
-            textButtonTheme: textButtonTheme,
-            colorScheme: ColorScheme.fromSwatch().copyWith(
-                secondary: primaryColor,
-                surface: deezerBg,
-                brightness: Brightness.dark),
-            checkboxTheme: CheckboxThemeData(
-              fillColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            radioTheme: RadioThemeData(
-              fillColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            switchTheme: SwitchThemeData(
-              thumbColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-              trackColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            bottomAppBarTheme: const BottomAppBarTheme(color: deezerBottom), dialogTheme: DialogThemeData(backgroundColor: deezerBottom)),
-        Themes.Black: ThemeData(
-            useMaterial3: false,
-            brightness: Brightness.dark,
-            textTheme: textTheme,
-            fontFamily: _fontFamily,
-            primaryColor: primaryColor,
-            scaffoldBackgroundColor: Colors.black,
-            sliderTheme: _sliderTheme,
-            bottomSheetTheme: const BottomSheetThemeData(
-              backgroundColor: Colors.black,
-            ),
-            outlinedButtonTheme: outlinedButtonTheme,
-            textButtonTheme: textButtonTheme,
-            colorScheme: ColorScheme.fromSwatch().copyWith(
-                secondary: primaryColor,
-                surface: Colors.black,
-                brightness: Brightness.dark),
-            checkboxTheme: CheckboxThemeData(
-              fillColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            radioTheme: RadioThemeData(
-              fillColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            switchTheme: SwitchThemeData(
-              thumbColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-              trackColor: WidgetStateProperty.resolveWith<Color?>(
-                  (Set<WidgetState> states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return null;
-                }
-                if (states.contains(WidgetState.selected)) {
-                  return primaryColor;
-                }
-                return null;
-              }),
-            ),
-            bottomAppBarTheme: const BottomAppBarTheme(color: Colors.black), dialogTheme: DialogThemeData(backgroundColor: Colors.black))
-      };
+    Themes.Light: ThemeData(
+      useMaterial3: false,
+      brightness: Brightness.light,
+      textTheme: textTheme,
+      fontFamily: _fontFamily,
+      primaryColor: primaryColor,
+      sliderTheme: _sliderTheme,
+      outlinedButtonTheme: outlinedButtonTheme,
+      textButtonTheme: textButtonTheme,
+      colorScheme: ColorScheme.fromSwatch().copyWith(
+        secondary: primaryColor,
+        brightness: Brightness.light,
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+        trackColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      bottomAppBarTheme: const BottomAppBarThemeData(color: Color(0xfff5f5f5)),
+    ),
+    Themes.Dark: ThemeData(
+      useMaterial3: false,
+      brightness: Brightness.dark,
+      textTheme: textTheme,
+      fontFamily: _fontFamily,
+      primaryColor: primaryColor,
+      sliderTheme: _sliderTheme,
+      outlinedButtonTheme: outlinedButtonTheme,
+      textButtonTheme: textButtonTheme,
+      colorScheme: ColorScheme.fromSwatch().copyWith(
+        secondary: primaryColor,
+        brightness: Brightness.dark,
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+        trackColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      bottomAppBarTheme: const BottomAppBarThemeData(color: Color(0xff424242)),
+    ),
+    Themes.Deezer: ThemeData(
+      useMaterial3: false,
+      brightness: Brightness.dark,
+      textTheme: textTheme,
+      fontFamily: _fontFamily,
+      primaryColor: primaryColor,
+      sliderTheme: _sliderTheme,
+      scaffoldBackgroundColor: deezerBg,
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: deezerBottom,
+      ),
+      cardColor: deezerBg,
+      outlinedButtonTheme: outlinedButtonTheme,
+      textButtonTheme: textButtonTheme,
+      colorScheme: ColorScheme.fromSwatch().copyWith(
+        secondary: primaryColor,
+        surface: deezerBg,
+        brightness: Brightness.dark,
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+        trackColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      bottomAppBarTheme: const BottomAppBarThemeData(color: deezerBottom),
+      dialogTheme: DialogThemeData(backgroundColor: deezerBottom),
+    ),
+    Themes.Black: ThemeData(
+      useMaterial3: false,
+      brightness: Brightness.dark,
+      textTheme: textTheme,
+      fontFamily: _fontFamily,
+      primaryColor: primaryColor,
+      scaffoldBackgroundColor: Colors.black,
+      sliderTheme: _sliderTheme,
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.black,
+      ),
+      outlinedButtonTheme: outlinedButtonTheme,
+      textButtonTheme: textButtonTheme,
+      colorScheme: ColorScheme.fromSwatch().copyWith(
+        secondary: primaryColor,
+        surface: Colors.black,
+        brightness: Brightness.dark,
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+        trackColor: WidgetStateProperty.resolveWith<Color?>((
+          Set<WidgetState> states,
+        ) {
+          if (states.contains(WidgetState.disabled)) {
+            return null;
+          }
+          if (states.contains(WidgetState.selected)) {
+            return primaryColor;
+          }
+          return null;
+        }),
+      ),
+      bottomAppBarTheme: const BottomAppBarThemeData(color: Colors.black),
+      dialogTheme: DialogThemeData(backgroundColor: Colors.black),
+    ),
+  };
 
   Future<String> getPath() async =>
       p.join((await getApplicationDocumentsDirectory()).path, 'settings.json');
@@ -567,8 +661,12 @@ class SpotifyCredentialsSave {
   List<String>? scopes;
   DateTime? expiration;
 
-  SpotifyCredentialsSave(
-      {this.accessToken, this.refreshToken, this.scopes, this.expiration});
+  SpotifyCredentialsSave({
+    this.accessToken,
+    this.refreshToken,
+    this.scopes,
+    this.expiration,
+  });
 
   //JSON
   factory SpotifyCredentialsSave.fromJson(Map<String, dynamic> json) =>

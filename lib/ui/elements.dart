@@ -48,7 +48,7 @@ class FreezerAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: ThemeData(primaryColor: (Theme.of(context).brightness == Brightness.light) ? Colors.white : Colors.black),
+      data: Theme.of(context),
       child: AppBar(
         systemOverlayStyle: SystemUiOverlayStyle(statusBarBrightness: Theme.of(context).brightness),
         elevation: 0.0,

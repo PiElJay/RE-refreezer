@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
+import '../api/browser_login.dart';
 import '../api/deezer.dart';
 import '../api/deezer_login.dart';
 import '../api/definitions.dart';
@@ -201,6 +202,27 @@ class _LoginWidgetState extends State<LoginWidget> {
                       'Login using email'.i18n,
                     ),
                     onPressed: () {
+                      if (!DeezerLogin.emailLoginConfigured) {
+                        showDialog(
+                          context: context,
+                          builder: (dialogContext) => AlertDialog(
+                            title: const Text('Accesso diretto non disponibile'),
+                            content: const Text(
+                              'Questa build non contiene le credenziali '
+                              'applicative Deezer necessarie per questo metodo. '
+                              'Usa il login via browser o tramite token ARL. '
+                              'Non è un errore della tua password.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(dialogContext),
+                                child: const Text('OK'),
+                              ),
+                            ],
+                          ),
+                        );
+                        return;
+                      }
                       showDialog(
                           context: context,
                           builder: (context) => EmailLogin(_update));
@@ -305,6 +327,7 @@ class _LoginBrowserState extends State<LoginBrowser> {
   bool _readingSession = false;
   bool _completed = false;
   String? _pageError;
+  InAppWebViewController? _browserController;
 
   @override
   void initState() {
@@ -322,22 +345,24 @@ class _LoginBrowserState extends State<LoginBrowser> {
     try {
       // Native CookieManager also reads HttpOnly cookies. Never scrape or log
       // credentials and never depend on the retired /open_app redirect.
-      final cookie = await CookieManager.instance().getCookie(
-        url: WebUri('https://www.deezer.com/'),
-        name: 'arl',
-      );
-      final arl = cookie?.value.toString().trim();
-      if (!mounted || arl == null || arl.isEmpty || _completed) return;
+      final session = await readDeezerBrowserSession((url) async {
+        final cookie = await CookieManager.instance().getCookie(
+          url: WebUri(url.toString()),
+          name: 'arl',
+        );
+        return cookie?.value.toString();
+      });
+      if (!mounted || session == null || _completed) return;
       _completed = true;
       _sessionTimer?.cancel();
       // Keep the Deezer website's other cookies intact, but do not reuse an
       // old app session on a subsequent login attempt after logout.
       try {
         await CookieManager.instance().deleteCookie(
-            url: WebUri('https://www.deezer.com/'), name: 'arl');
+            url: WebUri(session.cookieUrl.toString()), name: 'arl');
       } catch (_) {}
       if (!mounted) return;
-      settings.arl = arl;
+      settings.arl = session.arl;
       Navigator.of(context).pop();
       widget.updateParent();
     } catch (_) {
@@ -365,6 +390,14 @@ class _LoginBrowserState extends State<LoginBrowser> {
               content: Text(_pageError!),
               actions: [
                 TextButton(
+                  onPressed: () => _browserController?.loadUrl(
+                    urlRequest: URLRequest(
+                      url: WebUri(deezerBrowserLoginUrl.toString()),
+                    ),
+                  ),
+                  child: const Text('Riprova'),
+                ),
+                TextButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child: Text('Back'.i18n),
                 ),
@@ -373,9 +406,13 @@ class _LoginBrowserState extends State<LoginBrowser> {
           Expanded(
             child: InAppWebView(
               initialUrlRequest: URLRequest(
-                url: WebUri('https://www.deezer.com/login'),
+                url: WebUri(deezerBrowserLoginUrl.toString()),
               ),
-              onLoadStart: (_, _) => _readSession(),
+              onWebViewCreated: (controller) => _browserController = controller,
+              onLoadStart: (_, _) {
+                if (_pageError != null) setState(() => _pageError = null);
+                _readSession();
+              },
               onLoadStop: (_, _) => _readSession(),
               onReceivedHttpError: (_, request, response) async {
                 if (request.isForMainFrame != true) return;
@@ -383,8 +420,9 @@ class _LoginBrowserState extends State<LoginBrowser> {
                 if (!mounted || _completed) return;
                 setState(
                   () => _pageError =
-                      'Deezer: HTTP ${response.statusCode}. '
-                      'Puoi tornare indietro e riprovare il login.',
+                      'Deezer: HTTP ${response.statusCode} su '
+                      '${request.url.host}${request.url.path}. '
+                      'La pagina non è disponibile. Riprova il login.',
                 );
               },
             ),

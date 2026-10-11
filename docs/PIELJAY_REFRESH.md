@@ -62,3 +62,11 @@ Deezer catalog availability and lyric coverage depend on the account and provide
 ### Browser login repair
 
 Browser login now reads the Deezer `arl` session cookie through the native WebView cookie manager after sign-in. It no longer forces `/open_app` or waits for `deezer.page.link` / `dzr.page.link` intents. A periodic check also handles login without a page reload. Reads stop on disposal and completion; HTTP errors on the main page offer a way back. Credentials and cookies are never printed. No Deezer app credentials are needed for this browser flow. A real authenticated device sign-in still requires manual verification.
+
+### Login follow-up (0.8.1)
+
+The provider's localized login links now redirect to `https://account.deezer.com/it/login/`. The browser opens that account endpoint directly and checks ARL cookies on `www.deezer.com`, `account.deezer.com` and `deezer.com`; it does not assume the cookie is shared across hosts. Main-frame HTTP failures show the host and path without query parameters, with retry/back actions.
+
+The email/password method is unavailable in a build lacking Deezer application credentials: the UI explains the configuration issue before collecting a password and the API rejects it before making any HTTP requests. It does not report a password error in that case.
+
+Five additional regression tests cover host-only cookies, failed cookie scopes, empty sessions, stopping at the first session and the unconfigured email method. Authenticated browser sign-in must still be checked on a device; public URL retrieval from the build environment is blocked by its network gateway.

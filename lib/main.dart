@@ -211,6 +211,9 @@ class _MainScreenState extends State<MainScreen>
   ];
   Future<void>? _initialization;
   int _selected = 0;
+  final FocusScopeNode navigationBarFocusNode = FocusScopeNode();
+  final FocusNode screenFocusNode = FocusNode();
+  final FocusNode _keyboardFocusNode = FocusNode();
   StreamSubscription? _urlLinkStream;
   void _onNetworkChanged() {
     if (NetworkMonitor.instance.value) {
@@ -228,6 +231,7 @@ class _MainScreenState extends State<MainScreen>
     );
     NetworkMonitor.instance.addListener(_onNetworkChanged);
     _initialization = _init();
+    screenFocusNode.requestFocus();
     super.initState();
   }
 
@@ -341,6 +345,9 @@ class _MainScreenState extends State<MainScreen>
     NetworkMonitor.instance.removeListener(_onNetworkChanged);
     _urlLinkStream?.cancel();
     _lifeCycleListener.dispose();
+    navigationBarFocusNode.dispose();
+    screenFocusNode.dispose();
+    _keyboardFocusNode.dispose();
     super.dispose();
   }
 
@@ -443,11 +450,6 @@ class _MainScreenState extends State<MainScreen>
 
   @override
   Widget build(BuildContext context) {
-    FocusScopeNode navigationBarFocusNode =
-        FocusScopeNode(); // for bottom navigation bar
-    FocusNode screenFocusNode = FocusNode(); // for CustomNavigator
-    screenFocusNode.requestFocus();
-
     return FutureBuilder(
       future: _initialization,
       builder: (context, snapshot) {
@@ -455,7 +457,7 @@ class _MainScreenState extends State<MainScreen>
         if (snapshot.connectionState == ConnectionState.done) {
           // When _initialization is done, render app
           return KeyboardListener(
-            focusNode: FocusNode(),
+            focusNode: _keyboardFocusNode,
             onKeyEvent: (event) =>
                 _handleKey(event, navigationBarFocusNode, screenFocusNode),
             child: Scaffold(

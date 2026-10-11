@@ -8,6 +8,7 @@ import '../api/definitions.dart';
 import '../api/download.dart';
 import '../service/audio_service.dart';
 import 'cached_image.dart';
+import 'downloads_screen.dart';
 import 'lyrics.dart';
 import 'menu.dart';
 import 'player_screen.dart';
@@ -238,20 +239,21 @@ class ModernPlayer extends StatelessWidget {
                                   OutlinedButton.icon(
                                     onPressed: () async {
                                       final track = Track.fromMediaItem(item);
-                                      if (await downloadManager.checkOffline(
+                                      if (!await downloadManager.checkOffline(
                                         track: track,
                                       )) {
-                                        if (context.mounted)
-                                          MenuSheet().defaultTrackMenu(
-                                            track,
-                                            context: context,
-                                          );
-                                      } else {
                                         await downloadManager.addOfflineTrack(
                                           track,
                                           private: true,
                                         );
-                                        MenuSheet().showDownloadStartedToast();
+                                      }
+                                      if (context.mounted) {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                const DownloadsScreen(),
+                                          ),
+                                        );
                                       }
                                     },
                                     icon: const Icon(Icons.offline_pin_rounded),

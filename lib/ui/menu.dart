@@ -332,9 +332,7 @@ class MenuSheet {
     builder: (innerContext, snapshot) {
       bool isOffline = snapshot.data ?? (track.offline ?? false);
       return ListTile(
-        title: Text(
-          isOffline ? 'Remove offline'.i18n : 'Scarica per ascoltare offline',
-        ),
+        title: Text(isOffline ? 'Remove offline'.i18n : 'Download'),
         leading: const Icon(Icons.offline_pin),
         onTap: () async {
           if (isOffline) {
@@ -398,13 +396,16 @@ class MenuSheet {
   );
 
   Widget offlineAlbum(Album a, BuildContext context) => ListTile(
-    title: Text('Scarica per ascoltare offline'),
+    title: const Text('Download'),
     leading: const Icon(Icons.offline_pin),
     onTap: () async {
-      await deezerAPI.addFavoriteAlbum(a.id!);
       await downloadManager.addOfflineAlbum(a, private: true);
-      if (context.mounted) _close(context);
-      showDownloadStartedToast();
+      if (context.mounted) {
+        _close(context);
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const DownloadsScreen()));
+      }
     },
   );
 
@@ -558,14 +559,16 @@ class MenuSheet {
   );
 
   Widget addPlaylistOffline(Playlist p, BuildContext context) => ListTile(
-    title: Text('Scarica per ascoltare offline'),
+    title: const Text('Download'),
     leading: const Icon(Icons.offline_pin),
     onTap: () async {
-      //Add to library
-      await deezerAPI.addPlaylist(p.id!);
-      downloadManager.addOfflinePlaylist(p, private: true);
-      if (context.mounted) _close(context);
-      showDownloadStartedToast();
+      await downloadManager.addOfflinePlaylist(p, private: true);
+      if (context.mounted) {
+        _close(context);
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const DownloadsScreen()));
+      }
     },
   );
 

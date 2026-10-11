@@ -21,7 +21,7 @@ This fork keeps Deezer as its music provider and preserves upstream licensing.
 
 ## Build
 
-Clone with submodules. Use Flutter 3.47.7 and Java 17, Android SDK 36 (target 35, minimum Android 7.0) and NDK 27.0.12077973 for the app (Flutter plugins also install 28.2.13676358). Gradle 8.14.4, AGP 8.11.1 and Kotlin 2.2.20 are pinned.
+Clone with submodules. Use Flutter 3.47.7 and Java 17, Android SDK 36 (target 35, minimum Android 7.0) and NDK 28.2.13676358. Gradle 8.14.4, AGP 8.11.1 and Kotlin 2.2.20 are pinned.
 
 Copy `lib/.env.example` to `lib/.env`. Blank values permit compilation and ARL sign-in; email/password Deezer sign-in and Last.fm require your own corresponding application credentials.
 

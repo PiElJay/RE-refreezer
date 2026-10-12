@@ -27,7 +27,6 @@ import 'package:url_launcher/url_launcher_string.dart';
 import 'diagnostics_screen.dart';
 import 'quality_notice.dart';
 import '../api/cache.dart';
-import '../fonts/refreezer_icons.dart';
 import '../main.dart';
 import '../utils/env.dart';
 import '../utils/navigator_keys.dart';

@@ -134,6 +134,14 @@ class MenuSheet {
     List<Widget> options = const [],
     Function? onRemove,
   }) {
+    if (track.id?.startsWith('local:') == true) {
+      show(context, [
+        ListTile(leading: const Icon(Icons.music_note_rounded),
+          title: Text(track.title ?? ''), subtitle: const Text('Brano sul dispositivo · già disponibile offline')),
+        addToQueueNext(track, context), addToQueue(track, context), ...options,
+      ]);
+      return;
+    }
     showWithTrack(context, track, [
       addToQueueNext(track, context),
       addToQueue(track, context),

@@ -24,7 +24,8 @@ class LocalSong {
   static String? sourceUri(dynamic value) {
     if (value is! String) return null;
     final uri = Uri.tryParse(value);
-    return uri?.scheme == 'content' && uri!.authority.isNotEmpty ? value : null;
+    if (uri == null || uri.scheme != 'content' || uri.authority.isEmpty) { return null; }
+    return value;
   }
   static bool isMusic(Map<dynamic, dynamic> row) {
     if (sourceUri(row['uri']) == null) return false;

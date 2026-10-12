@@ -36,6 +36,9 @@ jobs:
       - name: Install Android components
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
       - name: Prepare generated sources
+        env:
+          DEEZER_CLIENT_ID: ${{ secrets.DEEZER_CLIENT_ID }}
+          DEEZER_CLIENT_SECRET: ${{ secrets.DEEZER_CLIENT_SECRET }}
         run: sh tool/bootstrap.sh
       - name: Analyze
         run: flutter analyze --no-fatal-infos

@@ -3,6 +3,7 @@ set -eu
 cd "$(dirname "$0")/.."
 git submodule update --init --recursive
 if [ ! -f lib/.env ]; then cp lib/.env.example lib/.env; fi
+python3 tool/configure_deezer_env.py
 flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 # The inherited Last.fm submodule targets Dart 3.0. Generate compatible code

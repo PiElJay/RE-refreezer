@@ -83,13 +83,26 @@ Create a `.env` file in the `lib` folder of the project and add the following co
 
 ```text
 # Deezer API credentials
-deezerClientId = '<Your_Deezer_Client_Id>';
-deezerClientSecret = '<Your_Deezer_Client_Secret>';
+deezerClientId=<Your_Deezer_Client_Id>
+deezerClientSecret=<Your_Deezer_Client_Secret>
 
 # LastFM API credentials
 lastFmApiKey = '<Your_LastFM_API_Key>'
 lastFmApiSecret = 'Your_LastFM_API_Secret'
 ```
+
+Direct email/password login requires application credentials issued for a
+Deezer application you are authorized to use. These are separate from the
+user's Deezer email, password and ARL. Without them, browser/ARL login remains
+available and direct login is unavailable.
+
+For the debug APK workflow, configure repository Actions secrets
+`DEEZER_CLIENT_ID` and `DEEZER_CLIENT_SECRET`. The bootstrap step supplies both
+to the ignored `lib/.env` before Envied generates the application configuration.
+Do not commit these values. Local builds can use an existing `lib/.env` or the
+same two environment variables. A partial configuration fails the build
+without printing the credentials. Configuring direct login does not establish
+that the account has permission to stream a requested track or quality.
 
 Build generated files:
 

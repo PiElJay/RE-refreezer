@@ -36,7 +36,11 @@ class NetworkMonitor extends ValueNotifier<bool> {
             .timeout(const Duration(seconds: 4));
         // A provider rejection is not evidence of airplane mode.
         online = response.statusCode >= 200 && response.statusCode < 600;
-        AppDiagnostics.instance.record('networkProbe', 'REACHABLE', httpStatus: response.statusCode);
+        AppDiagnostics.instance.record(
+          'networkProbe',
+          'REACHABLE',
+          httpStatus: response.statusCode,
+        );
       }
     } catch (_) {
       /* No Internet, including captive Wi-Fi. */

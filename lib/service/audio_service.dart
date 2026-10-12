@@ -49,9 +49,11 @@ class AudioPlayerHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
   AudioPlayerHandler() {
     _initialization = _init();
-    unawaited(_initialization.catchError((Object _) {
-      AppDiagnostics.instance.record('playerInitialization', 'FAILED');
-    }));
+    unawaited(
+      _initialization.catchError((Object _) {
+        AppDiagnostics.instance.record('playerInitialization', 'FAILED');
+      }),
+    );
   }
 
   int? _audioSession;
@@ -282,7 +284,11 @@ class AudioPlayerHandler extends BaseAudioHandler
 
   @override
   Future<void> play() async {
-    unawaited(_player.play().catchError((Object error) { _playbackError(error); }));
+    unawaited(
+      _player.play().catchError((Object error) {
+        _playbackError(error);
+      }),
+    );
 
     //Scrobble to LastFM
     MediaItem? newMediaItem = mediaItem.value;
@@ -636,24 +642,32 @@ class AudioPlayerHandler extends BaseAudioHandler
     //This just returns fake url that contains metadata
     int quality = streamQuality ?? await getStreamQuality();
 
-    List? streamPlaybackDetails = _playbackDetails(mediaItem.extras?['playbackDetails']);
+    List? streamPlaybackDetails = _playbackDetails(
+      mediaItem.extras?['playbackDetails'],
+    );
     String streamItemId = mediaItem.id;
 
     //If Deezer provided a FALLBACK track, use the playbackDetails and id from the fallback track
     //for streaming (original stream unavailable)
     if (mediaItem.extras?['fallbackId'] != null) {
       streamItemId = mediaItem.extras?['fallbackId'];
-      streamPlaybackDetails = _playbackDetails(mediaItem.extras?['playbackDetailsFallback']);
+      streamPlaybackDetails = _playbackDetails(
+        mediaItem.extras?['playbackDetailsFallback'],
+      );
     }
 
     // Missing catalog tokens are refreshed by the server only when opened.
     final details = List<dynamic>.of(streamPlaybackDetails ?? []);
-    while (details.length < 3) { details.add(null); }
+    while (details.length < 3) {
+      details.add(null);
+    }
     return Uri.http('127.0.0.1:36958', '/', {
-      'q': quality.toString(), 'id': mediaItem.id,
+      'q': quality.toString(),
+      'id': mediaItem.id,
       'streamTrackId': streamItemId,
       'trackToken': details[2]?.toString() ?? '',
-      'mv': details[1]?.toString() ?? '', 'md5origin': details[0]?.toString() ?? '',
+      'mv': details[1]?.toString() ?? '',
+      'md5origin': details[0]?.toString() ?? '',
       if (!preferLocal) 'forceOnline': '1',
     }).toString();
   }
@@ -661,8 +675,12 @@ class AudioPlayerHandler extends BaseAudioHandler
   List? _playbackDetails(dynamic value) {
     if (value is List) return value;
     if (value is! String) return null;
-    try { final decoded = jsonDecode(value); return decoded is List ? decoded : null; }
-    catch (_) { return null; }
+    try {
+      final decoded = jsonDecode(value);
+      return decoded is List ? decoded : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Get requested stream quality based on connection and settings.
@@ -706,8 +724,12 @@ class AudioPlayerHandler extends BaseAudioHandler
     try {
       _requestedIndex = resolved;
       await _player.setShuffleModeEnabled(false);
-      _playlist = await loadAudioQueue(_player, sources, resolved,
-          position: matching >= 0 ? position : Duration.zero);
+      _playlist = await loadAudioQueue(
+        _player,
+        sources,
+        resolved,
+        position: matching >= 0 ? position : Duration.zero,
+      );
     } finally {
       _requestedIndex = -1;
       _rearranging = false;
@@ -860,7 +882,10 @@ class AudioPlayerHandler extends BaseAudioHandler
 
   Future<void> _handlePlaybackError() async {
     if (_rearranging) return;
-    if (await _showPlaybackFailure()) { await pause(); return; }
+    if (await _showPlaybackFailure()) {
+      await pause();
+      return;
+    }
     await _recoverPlayback();
   }
 
@@ -868,13 +893,19 @@ class AudioPlayerHandler extends BaseAudioHandler
     String code = 'SOURCE_UNAVAILABLE';
     bool fatal = false;
     try {
-      final data = await DownloadManager.platform.invokeMapMethod<String, dynamic>('getPlaybackDiagnostics');
+      final data = await DownloadManager.platform
+          .invokeMapMethod<String, dynamic>('getPlaybackDiagnostics');
       final candidate = data?['errorCode'];
-      if (candidate is String && candidate != 'NONE' && RegExp(r'^[A-Z0-9_]{1,64}$').hasMatch(candidate)) code = candidate;
+      if (candidate is String &&
+          candidate != 'NONE' &&
+          RegExp(r'^[A-Z0-9_]{1,64}$').hasMatch(candidate))
+        code = candidate;
       fatal = data?['fatal'] == true;
     } catch (_) {}
     AppDiagnostics.instance.record('stream', code);
-    await Fluttertoast.showToast(msg: 'Audio non disponibile: $code. Apri Impostazioni > Diagnostica.');
+    await Fluttertoast.showToast(
+      msg: 'Audio non disponibile: $code. Apri Impostazioni > Diagnostica.',
+    );
     return fatal;
   }
 

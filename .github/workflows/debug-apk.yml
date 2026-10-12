@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: debug-apk-${{ github.ref }}
+  group: debug-apk-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
   build:
@@ -30,6 +30,9 @@ jobs:
           channel: stable
           cache: true
       - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: ''
       - name: Install Android components
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
       - name: Prepare generated sources

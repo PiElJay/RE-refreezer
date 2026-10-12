@@ -17,6 +17,11 @@ class AppDiagnostics extends ChangeNotifier {
     Logger.root.info('Diagnostic $stage: $value');
     notifyListeners();
   }
-  String report() => ['PiElJay - diagnostica 0.8.2',
-    ..._state.entries.map((entry) => '${entry.key}: ${entry.value}'), '', ..._events].join('\n');
+
+  String report() => [
+    'PiElJay - diagnostica 0.8.2',
+    ..._state.entries.map((entry) => '${entry.key}: ${entry.value}'),
+    '',
+    ..._events,
+  ].join('\n');
 }

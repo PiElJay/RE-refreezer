@@ -463,15 +463,35 @@ class _MainScreenState extends State<MainScreen>
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           AppDiagnostics.instance.record('startup', 'INITIALIZATION_FAILED');
-          return Scaffold(body: SafeArea(child: Center(child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text('Avvio del player non riuscito.'), const SizedBox(height: 16),
-              FilledButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => const DiagnosticsScreen())), child: const Text('Apri diagnostica')),
-              TextButton(onPressed: () => setState(() => _initialization = _init()), child: const Text('Riprova')),
-            ]),
-          ))));
+          return Scaffold(
+            body: SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Avvio del player non riuscito.'),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const DiagnosticsScreen(),
+                          ),
+                        ),
+                        child: const Text('Apri diagnostica'),
+                      ),
+                      TextButton(
+                        onPressed: () =>
+                            setState(() => _initialization = _init()),
+                        child: const Text('Riprova'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
         }
         // Check _initialization status
         if (snapshot.connectionState == ConnectionState.done) {
@@ -488,9 +508,9 @@ class _MainScreenState extends State<MainScreen>
                   children: <Widget>[
                     const PlayerBar(),
                     NavigationBar(
-                      backgroundColor: Theme.of(
-                        context,
-                      ).bottomAppBarTheme.color,
+                      backgroundColor: Theme.of(context)
+                          .bottomAppBarTheme
+                          .color,
                       selectedIndex: _selected,
                       onDestinationSelected: (int index) async {
                         //Pop all routes until home screen

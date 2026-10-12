@@ -2,7 +2,13 @@
 set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cache_root="${GRADLE_USER_HOME:-${HOME}/.gradle}/caches/modules-2/files-2.1/org.nanohttpd/nanohttpd/2.3.1"
-nanohttpd_jar="$(rg --files "$cache_root" | rg '/nanohttpd-2\.3\.1\.jar$' | head -1)"
+shopt -s nullglob
+jars=("$cache_root"/*/nanohttpd-2.3.1.jar)
+if [ "${#jars[@]}" -eq 0 ]; then
+  echo 'Build the Android app first to resolve NanoHTTPD.' >&2
+  exit 1
+fi
+nanohttpd_jar="${jars[0]}"
 classes_dir="$(mktemp -d)"
 trap 'rm -rf "$classes_dir"' EXIT
 javac -cp "$nanohttpd_jar" -d "$classes_dir" \

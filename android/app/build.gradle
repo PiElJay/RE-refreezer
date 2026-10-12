@@ -73,7 +73,7 @@ android {
             minifyEnabled false
         }
         debug {
-            applicationIdSuffix '.debug'
+            applicationIdSuffix '.preview'
             versionNameSuffix '-debug'
         }
     }

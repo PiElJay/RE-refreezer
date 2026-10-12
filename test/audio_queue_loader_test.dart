@@ -8,9 +8,11 @@ import 'package:refreezer/service/audio_queue_loader.dart';
 
 class TestAudioPlatform extends api.JustAudioPlatform {
   late TestPlayer lastPlayer;
+  final players = <TestPlayer>[];
   @override
   Future<api.AudioPlayerPlatform> init(api.InitRequest request) async {
     lastPlayer = TestPlayer(request.id);
+    players.add(lastPlayer);
     return lastPlayer;
   }
 
@@ -91,10 +93,12 @@ void main() {
       try {
         final playlist = await loadAudioQueue(
           player,
-          [
-            AudioSource.uri(Uri.parse('http://127.0.0.1:36958/?id=bad')),
-            AudioSource.uri(Uri.parse('http://127.0.0.1:36958/?id=good')),
-          ],
+          ConcatenatingAudioSource(
+            children: [
+              AudioSource.uri(Uri.parse('http://127.0.0.1:36958/?id=bad')),
+              AudioSource.uri(Uri.parse('http://127.0.0.1:36958/?id=good')),
+            ],
+          ),
           1,
           position: const Duration(seconds: 12),
         );
@@ -109,7 +113,40 @@ void main() {
       } finally {
         await player.dispose();
         api.JustAudioPlatform.instance = previous;
-        await platform.lastPlayer.events.close();
+        await Future.wait(platform.players.map((p) => p.events.close()));
+      }
+    },
+  );
+  test(
+    'a failed initial source can be followed by a new selection in the same queue',
+    () async {
+      final previous = api.JustAudioPlatform.instance;
+      final platform = TestAudioPlatform();
+      api.JustAudioPlatform.instance = platform;
+      final player = AudioPlayer(
+        handleInterruptions: false,
+        handleAudioSessionActivation: false,
+        androidApplyAudioAttributes: false,
+      );
+      final playlist = ConcatenatingAudioSource(
+        children: [
+          AudioSource.uri(Uri.parse('http://127.0.0.1:36958/?id=bad')),
+          AudioSource.uri(Uri.parse('http://127.0.0.1:36958/?id=good')),
+        ],
+      );
+      try {
+        await expectLater(
+          loadAudioQueue(player, playlist, 0),
+          throwsA(isA<StateError>()),
+        );
+        await loadAudioQueue(player, playlist, 1);
+        expect(player.currentIndex, 1);
+        expect(player.sequence.length, 2);
+        expect(platform.players.last.requests.last.initialIndex, 1);
+      } finally {
+        await player.dispose();
+        api.JustAudioPlatform.instance = previous;
+        await Future.wait(platform.players.map((p) => p.events.close()));
       }
     },
   );

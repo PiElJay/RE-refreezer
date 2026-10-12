@@ -724,9 +724,10 @@ class AudioPlayerHandler extends BaseAudioHandler
     try {
       _requestedIndex = resolved;
       await _player.setShuffleModeEnabled(false);
-      _playlist = await loadAudioQueue(
+      _playlist = ConcatenatingAudioSource(children: sources);
+      await loadAudioQueue(
         _player,
-        sources,
+        _playlist,
         resolved,
         position: matching >= 0 ? position : Duration.zero,
       );
@@ -770,7 +771,8 @@ class AudioPlayerHandler extends BaseAudioHandler
         await _player.setShuffleModeEnabled(false);
         _requestedIndex = resolved;
         queueSource = newQueueSource;
-        _playlist = await loadAudioQueue(_player, sources, resolved);
+        _playlist = ConcatenatingAudioSource(children: sources);
+        await loadAudioQueue(_player, _playlist, resolved);
         _sourceOffset = newQueue.length;
         _sourceExhausted = false;
         _failedIndices.clear();

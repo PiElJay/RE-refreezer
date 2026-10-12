@@ -3,13 +3,12 @@ import 'package:just_audio/just_audio.dart';
 /// Pass the initial index to the native loader; addAll then seek preloads zero.
 Future<ConcatenatingAudioSource> loadAudioQueue(
   AudioPlayer player,
-  List<AudioSource> sources,
+  ConcatenatingAudioSource playlist,
   int index, {
   Duration position = Duration.zero,
 }) async {
-  if (index < 0 || index >= sources.length)
-    throw RangeError.index(index, sources);
-  final playlist = ConcatenatingAudioSource(children: sources);
+  if (index < 0 || index >= playlist.children.length)
+    throw RangeError.index(index, playlist.children);
   await player.setAudioSource(
     playlist,
     initialIndex: index,

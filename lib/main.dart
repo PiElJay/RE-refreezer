@@ -239,6 +239,15 @@ class _MainScreenState extends State<MainScreen>
   }
 
   Future<void> _init() async {
+    try {
+      await _initializeComponents();
+    } catch (_) {
+      AppDiagnostics.instance.record('startup', 'INITIALIZATION_FAILED');
+      rethrow;
+    }
+  }
+
+  Future<void> _initializeComponents() async {
     //Set display mode
     if ((settings.displayMode ?? -1) >= 0) {
       FlutterDisplayMode.supported.then((modes) async {
@@ -462,7 +471,6 @@ class _MainScreenState extends State<MainScreen>
       future: _initialization,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          AppDiagnostics.instance.record('startup', 'INITIALIZATION_FAILED');
           return Scaffold(
             body: SafeArea(
               child: Center(
@@ -508,9 +516,9 @@ class _MainScreenState extends State<MainScreen>
                   children: <Widget>[
                     const PlayerBar(),
                     NavigationBar(
-                      backgroundColor: Theme.of(context)
-                          .bottomAppBarTheme
-                          .color,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).bottomAppBarTheme.color,
                       selectedIndex: _selected,
                       onDestinationSelected: (int index) async {
                         //Pop all routes until home screen

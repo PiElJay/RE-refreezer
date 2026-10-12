@@ -46,6 +46,9 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       try {
         final native = await DownloadManager.platform
             .invokeMapMethod<String, dynamic>('getPlaybackDiagnostics');
+        final responseType = native?['mediaResponse'];
+        final status = native?['mediaStatus'];
+        if (responseType is String) _diagnostics.record('mediaResponse', responseType, httpStatus: status is int ? status : null);
         final code = native?['errorCode'];
         if (code is String) _diagnostics.record('nativeStream', code);
         _diagnostics.record(
@@ -58,6 +61,21 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     } finally {
       if (mounted) setState(() => _checking = false);
     }
+  }
+
+  Future<void> _renewAudioSession() async {
+    if (_checking) return;
+    setState(() => _checking = true);
+    try {
+      await deezerAPI.authorize();
+      final port = await DownloadManager.platform.invokeMethod('startServer', {'arl': deezerAPI.arl});
+      if (port is int) LocalStreamEndpoint.instance.configure(port);
+      final state = await DownloadManager.platform.invokeMapMethod<String, dynamic>('refreshStreamSession');
+      final success = state?['authorized'] == true;
+      _diagnostics.record('nativeSession', success ? 'SESSION_RENEWED' : 'RENEWAL_FAILED');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success ? 'Sessione audio aggiornata. Riprova un brano, poi copia il report.' : 'Rinnovo non riuscito. Controlla la connessione e riprova.')));
+    } catch (_) { _diagnostics.record('nativeSession', 'RENEWAL_FAILED'); }
+    finally { if (mounted) setState(() => _checking = false); }
   }
 
   @override
@@ -83,6 +101,9 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                 : const Icon(Icons.fact_check_outlined),
             label: const Text('Verifica sistema'),
           ),
+          OutlinedButton.icon(onPressed: _checking ? null : _renewAudioSession,
+            icon: const Icon(Icons.refresh_rounded), label: const Text('Rinnova sessione audio')),
+          const Text('Un errore 403 riguarda l’autorizzazione del flusso audio. La presenza di una licenza nella sessione non garantisce che il server conceda quel brano o quella qualità.'),
           OutlinedButton.icon(
             onPressed: () async {
               await Clipboard.setData(

@@ -31,6 +31,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
+import java.nio.charset.StandardCharsets;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
@@ -52,6 +53,8 @@ public class Deezer {
     boolean authorized = false;
     volatile String lastErrorCode = "NONE";
     volatile int lastHttpStatus = 0;
+    volatile String mediaResponseType = "NONE";
+    volatile int mediaHttpStatus = 0;
     volatile boolean fatalStreamError = false;
     boolean authorizing = false;
 
@@ -83,13 +86,19 @@ public class Deezer {
         return authorized;
     }
 
+    public synchronized boolean refreshSession() {
+        authorized = false; token = null; sid = null; licenseToken = null;
+        lastErrorCode = "NONE"; fatalStreamError = false;
+        return authorize();
+    }
+
     //Make POST request
     private String POST(String _url, String data,  Map<String, String> additionalHeaders) {
         String result = null;
-
+        HttpsURLConnection connection = null;
         try {
             URL url = new URL(_url);
-            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+            connection = (HttpsURLConnection) url.openConnection();
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
             connection.setDoOutput(true);
@@ -97,7 +106,11 @@ public class Deezer {
             connection.setRequestProperty("User-Agent", USER_AGENT);
             connection.setRequestProperty("Accept-Language", contentLanguage + ",*");
             connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("Accept", "*/*");
+            connection.setRequestProperty("Accept", "application/json");
+            if (url.getHost().equals("media.deezer.com")) {
+                connection.setRequestProperty("Origin", "https://www.deezer.com");
+                connection.setRequestProperty("Referer", "https://www.deezer.com/");
+            }
 
             // Add additional headers if provided
             if (additionalHeaders != null && !additionalHeaders.isEmpty()) {
@@ -109,29 +122,32 @@ public class Deezer {
             //Write body
             if (data != null) {
                 try (DataOutputStream wr = new DataOutputStream(connection.getOutputStream())) {
-                    wr.writeBytes(data);
+                    wr.write(data.getBytes(StandardCharsets.UTF_8));
                 }
             }
 
             lastHttpStatus = connection.getResponseCode();
+            final boolean mediaRequest = url.getHost().equals("media.deezer.com");
+            if (mediaRequest) { mediaHttpStatus = lastHttpStatus; mediaResponseType = "EMPTY"; }
             if (lastHttpStatus >= 400) {
                 lastErrorCode = url.getHost().equals("media.deezer.com") ? "MEDIA_HTTP_" + lastHttpStatus : "GW_HTTP_" + lastHttpStatus;
                 fatalStreamError = lastHttpStatus == 401 || lastHttpStatus == 403;
             }
             InputStream responseStream = lastHttpStatus >= 400 ? connection.getErrorStream() : connection.getInputStream();
             if (responseStream == null) return null;
-            try (Scanner scanner = new Scanner(responseStream)) {
+            try (Scanner scanner = new Scanner(responseStream, StandardCharsets.UTF_8.name())) {
                 StringBuilder output = new StringBuilder();
                 while (scanner.hasNext()) {
                     output.append(scanner.nextLine());
                 }
                 result = output.toString();
             }
-            connection.disconnect();
+            if (mediaRequest) mediaResponseType = MediaResponseSummary.classify(connection.getContentType(), result);
         } catch (Exception e) {
             lastErrorCode = "PROVIDER_NETWORK_ERROR";
             logger.error("Deezer request failed: " + e.getClass().getSimpleName());
         }
+        finally { if (connection != null) connection.disconnect(); }
         return result;
     }
 
@@ -356,15 +372,16 @@ public class Deezer {
             try {
                 //arl cookie
                 Map<String, String> cookies = new HashMap<>();
-                cookies.put("Cookie", "arl=" + arl);
+                cookies.put("Cookie", "arl=" + arl + (sid == null || sid.isEmpty() ? "" : "; sid=" + sid));
                 // Create track_url payload
-                String payload = "{\n" +
-                        "\"license_token\": \"" + licenseToken + "\",\n" +
-                        "\"media\": [{ \"type\": \"FULL\", \"formats\": [{ \"cipher\": \"BF_CBC_STRIPE\", \"format\": \"" + format + "\"}]}],\n" +
-                        "\"track_tokens\": [\"" + trackToken + "\"]\n" +
-                        "}";
+                JSONObject requestedFormat = new JSONObject().put("cipher", "BF_CBC_STRIPE").put("format", format);
+                JSONObject requestedMedia = new JSONObject().put("type", "FULL").put("formats", new JSONArray().put(requestedFormat));
+                String payload = new JSONObject().put("license_token", licenseToken)
+                    .put("media", new JSONArray().put(requestedMedia))
+                    .put("track_tokens", new JSONArray().put(trackToken)).toString();
                 String output = POST("https://media.deezer.com/v1/get_url", payload, cookies);
 
+                if (mediaHttpStatus >= 400 || output == null) return new Pair<String, Boolean>(null, true);
                 JSONObject result = new JSONObject(output);
 
                 if (result.has("data")){
@@ -397,7 +414,6 @@ public class Deezer {
                     }
                 }
             } catch (Exception e) {
-                e.printStackTrace();
                 if (lastErrorCode.equals("NONE")) lastErrorCode = "MEDIA_INVALID_RESPONSE";
                 logger.warn("Streaming response failed: " + e.getClass().getSimpleName());
             }

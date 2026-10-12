@@ -43,6 +43,8 @@ jobs:
         run: flutter test
       - name: Test native byte ranges
         run: bash tool/test_native_ranges.sh
+      - name: Test safe media diagnostics
+        run: bash tool/test_media_responses.sh
       - name: Build ARM64 APK
         run: flutter build apk --debug --target-platform android-arm64 --split-per-abi
       - name: Test real offline HTTP server

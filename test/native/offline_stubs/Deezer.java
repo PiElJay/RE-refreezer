@@ -2,7 +2,10 @@ package r.r.refreezer;
 /** Provider fixture: any remote operation during offline playback fails. */
 class Deezer {
     String lastErrorCode = "NONE"; int lastHttpStatus = 0; boolean fatalStreamError = false;
-    void init(DownloadLog logger, String arl) {}
+    int mediaHttpStatus = 0; String mediaResponseType = "NONE";
+    String arl;
+    void init(DownloadLog logger, String arl) { this.arl = arl; }
+    boolean refreshSession() { throw new AssertionError("Offline playback refreshed remote auth"); }
     boolean authorize() { throw new AssertionError("Offline playback contacted Deezer"); }
     static class QualityInfo {
         boolean encrypted = false; int quality; String trackId;

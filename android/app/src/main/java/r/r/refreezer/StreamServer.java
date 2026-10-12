@@ -33,6 +33,8 @@ public class StreamServer {
         state.put("ready", ready); state.put("authorized", authorized);
         state.put("errorCode", serverErrorCode.equals("NONE") ? deezer.lastErrorCode : serverErrorCode);
         state.put("httpStatus", deezer.lastHttpStatus);
+        state.put("mediaStatus", deezer.mediaHttpStatus);
+        state.put("mediaResponse", deezer.mediaResponseType);
         state.put("fatal", deezer.fatalStreamError || !ready);
         return state;
     }
@@ -44,6 +46,9 @@ public class StreamServer {
         deezer.init(logger, arl);
         this.offlinePath = offlinePath;
     }
+
+    boolean matchesSession(String arl) { return Objects.equals(deezer.arl, arl); }
+    HashMap<String, Object> refreshSession() { authorized = deezer.refreshSession(); return diagnostics(); }
 
     //Create server
     void start() throws IOException {

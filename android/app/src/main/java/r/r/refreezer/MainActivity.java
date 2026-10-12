@@ -27,16 +27,9 @@ import androidx.annotation.Nullable;
 import com.ryanheise.audioservice.AudioServiceActivity;
 
 import java.lang.ref.WeakReference;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.plugin.common.EventChannel;
@@ -198,6 +191,9 @@ public class MainActivity extends AudioServiceActivity {
             }
             //Start streaming server
             if (call.method.equals("startServer")) {
+                if (streamServer != null && !streamServer.matchesSession(call.argument("arl"))) {
+                    streamServer.stop(); streamServer = null;
+                }
                 if (streamServer == null) {
                     //Get offline path
                     String offlinePath = getExternalFilesDir("offline").getAbsolutePath();
@@ -211,6 +207,14 @@ public class MainActivity extends AudioServiceActivity {
                 }
                 result.success(streamServer.getPort());
                 return;
+            }
+            if (call.method.equals("refreshStreamSession")) {
+                final StreamServer currentServer = streamServer;
+                if (currentServer == null) { result.error("SERVER_NOT_STARTED", "Audio server unavailable", null); return; }
+                new Thread(() -> {
+                    HashMap<String, Object> state = currentServer.refreshSession();
+                    new Handler(Looper.getMainLooper()).post(() -> result.success(state));
+                }).start(); return;
             }
             if (call.method.equals("getPlaybackDiagnostics")) {
                 if (streamServer != null) result.success(streamServer.diagnostics());
@@ -286,26 +290,7 @@ public class MainActivity extends AudioServiceActivity {
         DownloadsDatabase dbHelper = new DownloadsDatabase(getApplicationContext());
         db = dbHelper.getWritableDatabase();
 
-        //Trust all SSL Certs - Credits to Kilowatt36
-        TrustManager[] trustAllCerts = new TrustManager[]{
-                new X509TrustManager() {
-                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                        return null;
-                    }
-                    public void checkClientTrusted(X509Certificate[] certs, String authType) {
-                    }
-                    public void checkServerTrusted(X509Certificate[] certs, String authType) {
-                    }
-                }
-        };
-        SSLContext sc;
-        try {
-            sc = SSLContext.getInstance("SSL");
-            sc.init(null, trustAllCerts, new java.security.SecureRandom());
-            HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
-        } catch (NoSuchAlgorithmException | KeyManagementException e) {
-            Log.e(this.getLocalClassName(), e.getMessage());
-        }
+
     }
 
     @Override
@@ -342,7 +327,7 @@ public class MainActivity extends AudioServiceActivity {
         if (localMusic != null) localMusic.permissionResult(requestCode, grantResults);
     }
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (localMusic != null) localMusic.activityResult(requestCode, resultCode, data);
     }

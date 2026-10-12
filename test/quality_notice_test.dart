@@ -10,9 +10,10 @@ void main() {
     expect(fresh.wifiQuality, AudioQuality.MP3_128);
     expect(fresh.mobileQuality, AudioQuality.MP3_128);
     expect(fresh.downloadQuality, AudioQuality.MP3_128);
-    expect(fresh.offlineQuality, AudioQuality.FLAC);
-    final saved = Settings.fromJson({'wifiQuality': 'FLAC', 'downloadQuality': 'ASK'});
+    expect(fresh.offlineQuality, AudioQuality.MP3_128);
+    final saved = Settings.fromJson({'wifiQuality': 'FLAC', 'offlineQuality': 'FLAC', 'downloadQuality': 'ASK'});
     expect(saved.wifiQuality, AudioQuality.FLAC);
+    expect(saved.offlineQuality, AudioQuality.FLAC);
     expect(saved.downloadQuality, AudioQuality.ASK);
   });
 

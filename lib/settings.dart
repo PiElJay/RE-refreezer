@@ -45,7 +45,7 @@ class Settings {
   late AudioQuality wifiQuality;
   @JsonKey(defaultValue: AudioQuality.MP3_128)
   late AudioQuality mobileQuality;
-  @JsonKey(defaultValue: AudioQuality.FLAC)
+  @JsonKey(defaultValue: AudioQuality.MP3_128)
   late AudioQuality offlineQuality;
   @JsonKey(defaultValue: AudioQuality.MP3_128)
   late AudioQuality downloadQuality;

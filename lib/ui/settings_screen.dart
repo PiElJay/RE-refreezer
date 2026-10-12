@@ -586,6 +586,7 @@ class _QualitySettingsState extends State<QualitySettings> {
           const FreezerDivider(),
           ListTile(
             title: Text('Offline'.i18n),
+            subtitle: const Text('Qualità dei nuovi download nella libreria offline'),
             leading: const LeadingIcon(
               Icons.offline_pin,
               color: Color(0xff009a85),
@@ -648,29 +649,29 @@ class _QualityPickerState extends State<QualityPicker> {
     if (q == _quality || _changingQuality) return;
     _changingQuality = true;
     try {
-    if (widget.field != 'offline' && !await confirmOnlineQuality(context, q)) return;
-    if (!mounted) return;
-    setState(() {
-      _quality = q;
-    });
-    switch (widget.field) {
-      case 'mobile':
-        settings.mobileQuality = _quality;
-        break;
-      case 'wifi':
-        settings.wifiQuality = _quality;
-        break;
-      case 'download':
-        settings.downloadQuality = _quality;
-        break;
-      case 'offline':
-        settings.offlineQuality = _quality;
-        break;
-    }
-    await settings.save();
-    if (widget.field == 'mobile' || widget.field == 'wifi') {
-      await settings.updateAudioServiceQuality();
-    }
+      if (!await confirmOnlineQuality(context, q)) return;
+      if (!mounted) return;
+      setState(() {
+        _quality = q;
+      });
+      switch (widget.field) {
+        case 'mobile':
+          settings.mobileQuality = _quality;
+          break;
+        case 'wifi':
+          settings.wifiQuality = _quality;
+          break;
+        case 'download':
+          settings.downloadQuality = _quality;
+          break;
+        case 'offline':
+          settings.offlineQuality = _quality;
+          break;
+      }
+      await settings.save();
+      if (widget.field == 'mobile' || widget.field == 'wifi') {
+        await settings.updateAudioServiceQuality();
+      }
     } catch (error) {
       Logger.root.warning('Unable to apply audio quality (${error.runtimeType})');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -687,7 +688,7 @@ class _QualityPickerState extends State<QualityPicker> {
       children: <Widget>[
         ListTile(
           title: const Text('MP3 128kbps'),
-          subtitle: widget.field == 'offline' ? null : const Text('Consigliato per Deezer Free'),
+          subtitle: const Text('Consigliato per Deezer Free'),
           leading: Radio(
             groupValue: _quality,
             value: AudioQuality.MP3_128,
@@ -696,7 +697,7 @@ class _QualityPickerState extends State<QualityPicker> {
         ),
         ListTile(
           title: const Text('MP3 320kbps'),
-          subtitle: widget.field == 'offline' ? null : const Text('Richiede un abbonamento abilitato'),
+          subtitle: const Text('Richiede un abbonamento abilitato'),
           leading: Radio(
             groupValue: _quality,
             value: AudioQuality.MP3_320,
@@ -705,7 +706,7 @@ class _QualityPickerState extends State<QualityPicker> {
         ),
         ListTile(
           title: const Text('FLAC'),
-          subtitle: widget.field == 'offline' ? null : const Text('Richiede un abbonamento abilitato'),
+          subtitle: const Text('Richiede un abbonamento abilitato'),
           leading: Radio(
             groupValue: _quality,
             value: AudioQuality.FLAC,

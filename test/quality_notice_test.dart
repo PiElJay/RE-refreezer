@@ -5,16 +5,31 @@ import 'package:refreezer/ui/quality_notice.dart';
 import 'package:refreezer/ui/settings_screen.dart';
 
 void main() {
-  test('fresh remote settings use 128 while existing and offline formats survive', () {
+  test('remote defaults use 128 and later explicit choices survive reloads', () {
     final fresh = Settings.fromJson({});
     expect(fresh.wifiQuality, AudioQuality.MP3_128);
     expect(fresh.mobileQuality, AudioQuality.MP3_128);
     expect(fresh.downloadQuality, AudioQuality.MP3_128);
     expect(fresh.offlineQuality, AudioQuality.MP3_128);
-    final saved = Settings.fromJson({'wifiQuality': 'FLAC', 'offlineQuality': 'FLAC', 'downloadQuality': 'ASK'});
+    final saved = Settings.fromJson({'audioQualityPolicyVersion': 1,
+      'wifiQuality': 'FLAC', 'offlineQuality': 'FLAC', 'downloadQuality': 'ASK'});
     expect(saved.wifiQuality, AudioQuality.FLAC);
     expect(saved.offlineQuality, AudioQuality.FLAC);
     expect(saved.downloadQuality, AudioQuality.ASK);
+  });
+
+  test('upgrade resets old remote qualities without clearing account or library settings', () {
+    final upgraded = Settings.fromJson({'wifiQuality': 'MP3_320',
+      'mobileQuality': 'FLAC', 'offlineQuality': 'FLAC', 'downloadQuality': 'FLAC',
+      'arl': 'fixture-session', 'downloadPath': '/fixture/music'});
+    expect(upgraded.wifiQuality, AudioQuality.MP3_128);
+    expect(upgraded.mobileQuality, AudioQuality.MP3_128);
+    expect(upgraded.offlineQuality, AudioQuality.MP3_128);
+    expect(upgraded.downloadQuality, AudioQuality.MP3_128);
+    expect(upgraded.arl, 'fixture-session');
+    expect(upgraded.downloadPath, '/fixture/music');
+    upgraded.wifiQuality = AudioQuality.MP3_320;
+    expect(Settings.fromJson(upgraded.toJson()).wifiQuality, AudioQuality.MP3_320);
   });
 
   for (final quality in [AudioQuality.MP3_320, AudioQuality.FLAC]) {

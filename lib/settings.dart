@@ -41,6 +41,8 @@ class Settings {
   bool offlineMode = false;
 
   //Quality
+  @JsonKey(defaultValue: 0)
+  late int audioQualityPolicyVersion;
   @JsonKey(defaultValue: AudioQuality.MP3_128)
   late AudioQuality wifiQuality;
   @JsonKey(defaultValue: AudioQuality.MP3_128)
@@ -645,8 +647,19 @@ class Settings {
       p.join((await getApplicationDocumentsDirectory()).path, 'settings.json');
 
   //JSON
-  factory Settings.fromJson(Map<String, dynamic> json) =>
-      _$SettingsFromJson(json);
+  factory Settings.fromJson(Map<String, dynamic> json) {
+    final loaded = _$SettingsFromJson(json);
+    // Normalize the old high-quality defaults once. Explicit choices made
+    // after this upgrade are retained when the settings are saved.
+    if (loaded.audioQualityPolicyVersion < 1) {
+      loaded.wifiQuality = AudioQuality.MP3_128;
+      loaded.mobileQuality = AudioQuality.MP3_128;
+      loaded.offlineQuality = AudioQuality.MP3_128;
+      loaded.downloadQuality = AudioQuality.MP3_128;
+      loaded.audioQualityPolicyVersion = 1;
+    }
+    return loaded;
+  }
   Map<String, dynamic> toJson() => _$SettingsToJson(this);
 }
 

@@ -2,6 +2,8 @@ package r.r.refreezer;
 /** Provider fixture: any remote operation during offline playback fails. */
 class Deezer {
     String lastErrorCode = "NONE"; int lastHttpStatus = 0; boolean fatalStreamError = false;
+    String mediaFormat = "NONE", sessionOrigin = "NATIVE_API";
+    void adoptSession(ProviderSession session) { throw new AssertionError("Offline playback imported network credentials"); }
     int mediaHttpStatus = 0; String mediaResponseType = "NONE";
     String arl;
     void init(DownloadLog logger, String arl) { this.arl = arl; }

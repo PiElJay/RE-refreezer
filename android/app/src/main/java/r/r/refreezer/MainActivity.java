@@ -205,8 +205,12 @@ public class MainActivity extends AudioServiceActivity {
                         result.error("SERVER_BIND_FAILED", "Local audio server could not start", null); return;
                     }
                 }
+                streamServer.adoptSession(call.argument("session"));
                 result.success(streamServer.getPort());
                 return;
+            }
+            if (call.method.equals("setStreamingSession")) {
+                result.success(streamServer != null && streamServer.adoptSession(call.argument("session"))); return;
             }
             if (call.method.equals("refreshStreamSession")) {
                 final StreamServer currentServer = streamServer;

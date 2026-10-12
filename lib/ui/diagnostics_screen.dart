@@ -28,7 +28,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         'network',
         NetworkMonitor.instance.offline ? 'OFFLINE' : 'ONLINE',
       );
-      if (!NetworkMonitor.instance.offline) await deezerAPI.authorize();
+      if (!NetworkMonitor.instance.offline && deezerAPI.token == null) await deezerAPI.authorize();
       try {
         final response = await http
             .get(LocalStreamEndpoint.instance.health)
@@ -49,6 +49,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         final responseType = native?['mediaResponse'];
         final status = native?['mediaStatus'];
         if (responseType is String) _diagnostics.record('mediaResponse', responseType, httpStatus: status is int ? status : null);
+        for (final key in ['mediaFormat', 'sessionOrigin']) {
+          final value = native?[key];
+          if (value is String) _diagnostics.record(key, value);
+        }
         final code = native?['errorCode'];
         if (code is String) _diagnostics.record('nativeStream', code);
         _diagnostics.record(
@@ -68,9 +72,9 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     setState(() => _checking = true);
     try {
       await deezerAPI.authorize();
-      final port = await DownloadManager.platform.invokeMethod('startServer', {'arl': deezerAPI.arl});
+      final port = await DownloadManager.platform.invokeMethod('startServer', {'arl': deezerAPI.arl, 'session': deezerAPI.playbackSession});
       if (port is int) LocalStreamEndpoint.instance.configure(port);
-      final state = await DownloadManager.platform.invokeMapMethod<String, dynamic>('refreshStreamSession');
+      final state = await DownloadManager.platform.invokeMapMethod<String, dynamic>('getPlaybackDiagnostics');
       final success = state?['authorized'] == true;
       _diagnostics.record('nativeSession', success ? 'SESSION_RENEWED' : 'RENEWAL_FAILED');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success ? 'Sessione audio aggiornata. Riprova un brano, poi copia il report.' : 'Rinnovo non riuscito. Controlla la connessione e riprova.')));

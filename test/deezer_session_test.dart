@@ -26,6 +26,27 @@ http.Response reply(Map<String, dynamic> data) =>
     http.Response(jsonEncode(data), 200);
 void main() {
   setUp(() => settings = Settings.fromJson({}));
+  test('media snapshot uses the same SID and license as the catalog request', () async {
+    String? cookie;
+    final api = DeezerAPI(arl: 'fixture-account', client: MockClient((request) async {
+      if (request.url.queryParameters['method'] == 'deezer.getUserData') return reply(session());
+      cookie = request.headers['cookie'];
+      return reply({'error': {}, 'results': {'data': []}});
+    }));
+    expect(api.playbackSession, isNull);
+    expect(await api.authorize(), isTrue);
+    final shared = api.playbackSession!;
+    await api.callGwApi('song.getListData', params: {'sng_ids': ['42']});
+    expect(cookie, contains('sid=${shared['sid']}'));
+    expect(shared['token'], 'test-form'); expect(shared['licenseToken'], 'test-license');
+    api.arl = 'different-account';
+    expect(api.playbackSession, isNull);
+  });
+  test('catalog-only snapshot does not invent a media license', () async {
+    final api = DeezerAPI(arl: 'fixture-account', client: MockClient((_) async => reply(session(license: false))));
+    expect(await api.authorize(), isTrue);
+    expect(api.playbackSession?['licenseToken'], '');
+  });
   test(
     'valid string user IDs initialize SID and personal playlist IDs',
     () async {

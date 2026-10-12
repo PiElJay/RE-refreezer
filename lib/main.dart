@@ -305,7 +305,7 @@ class _MainScreenState extends State<MainScreen>
   Future<void> _startStreamingServer() async {
     final port = await DownloadManager.platform.invokeMethod<int>(
       'startServer',
-      {'arl': settings.arl},
+      {'arl': settings.arl, 'session': deezerAPI.playbackSession},
     );
     if (port == null)
       throw StateError('Local audio server did not return its port');
@@ -359,7 +359,7 @@ class _MainScreenState extends State<MainScreen>
   }
 
   Future<void> _loadSavedQueue() async {
-    GetIt.I<AudioPlayerHandler>().loadQueueFromFile();
+    await GetIt.I<AudioPlayerHandler>().loadQueueFromFile();
   }
 
   @override

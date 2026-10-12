@@ -44,6 +44,16 @@ class DeezerAPI {
 
   Future<bool>? _authorizing;
 
+  /// Share the same validated session with the native media client.
+  /// This snapshot is sent only over the in-process platform channel.
+  Map<String, String>? get playbackSession {
+    if (arl == null || arl!.isEmpty || userId == null || userId == '0' ||
+        token == null || token!.isEmpty || sid == null || sid!.isEmpty) return null;
+    return {'arl': arl!, 'userId': userId!, 'token': token!, 'sid': sid!,
+      'licenseToken': licenseToken ?? ''};
+  }
+
+
   //Get headers
   Map<String, String> get headers => {
     'User-Agent': DeezerAPI.userAgent,

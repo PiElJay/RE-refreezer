@@ -55,6 +55,8 @@ public class Deezer {
     volatile int lastHttpStatus = 0;
     volatile String mediaResponseType = "NONE";
     volatile int mediaHttpStatus = 0;
+    volatile String mediaFormat = "NONE";
+    volatile String sessionOrigin = "NATIVE_API";
     volatile boolean fatalStreamError = false;
     boolean authorizing = false;
 
@@ -86,8 +88,14 @@ public class Deezer {
         return authorized;
     }
 
+    synchronized void adoptSession(ProviderSession session) {
+        token = session.apiToken; sid = session.sid; licenseToken = session.licenseToken;
+        authorized = true; sessionOrigin = "SHARED_CATALOG";
+        lastErrorCode = "NONE"; fatalStreamError = false;
+    }
+
     public synchronized boolean refreshSession() {
-        authorized = false; token = null; sid = null; licenseToken = null;
+        authorized = false; token = null; sid = null; licenseToken = null; sessionOrigin = "NATIVE_API";
         lastErrorCode = "NONE"; fatalStreamError = false;
         return authorize();
     }
@@ -128,7 +136,9 @@ public class Deezer {
 
             lastHttpStatus = connection.getResponseCode();
             final boolean mediaRequest = url.getHost().equals("media.deezer.com");
-            if (mediaRequest) { mediaHttpStatus = lastHttpStatus; mediaResponseType = "EMPTY"; }
+            if (mediaRequest) { mediaHttpStatus = lastHttpStatus; mediaResponseType = "EMPTY";
+                if (lastHttpStatus >= 200 && lastHttpStatus < 300) { lastErrorCode = "NONE"; fatalStreamError = false; }
+            }
             if (lastHttpStatus >= 400) {
                 lastErrorCode = url.getHost().equals("media.deezer.com") ? "MEDIA_HTTP_" + lastHttpStatus : "GW_HTTP_" + lastHttpStatus;
                 fatalStreamError = lastHttpStatus == 401 || lastHttpStatus == 403;
@@ -142,7 +152,10 @@ public class Deezer {
                 }
                 result = output.toString();
             }
-            if (mediaRequest) mediaResponseType = MediaResponseSummary.classify(connection.getContentType(), result);
+            if (mediaRequest) {
+                mediaResponseType = MediaResponseSummary.classify(connection.getContentType(), result);
+                if (mediaResponseType.equals("JSON_ERROR_1002")) { lastErrorCode = "MEDIA_LICENSE_RIGHTS_DENIED"; fatalStreamError = true; }
+            }
         } catch (Exception e) {
             lastErrorCode = "PROVIDER_NETWORK_ERROR";
             logger.error("Deezer request failed: " + e.getClass().getSimpleName());
@@ -369,6 +382,7 @@ public class Deezer {
                 format = "MP3_128";
             }
 
+            mediaFormat = format;
             try {
                 //arl cookie
                 Map<String, String> cookies = new HashMap<>();

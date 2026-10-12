@@ -35,6 +35,7 @@ public class StreamServer {
         state.put("httpStatus", deezer.lastHttpStatus);
         state.put("mediaStatus", deezer.mediaHttpStatus);
         state.put("mediaResponse", deezer.mediaResponseType);
+        state.put("mediaFormat", deezer.mediaFormat); state.put("sessionOrigin", deezer.sessionOrigin);
         state.put("fatal", deezer.fatalStreamError || !ready);
         return state;
     }
@@ -45,6 +46,12 @@ public class StreamServer {
         deezer = new Deezer();
         deezer.init(logger, arl);
         this.offlinePath = offlinePath;
+    }
+
+    synchronized boolean adoptSession(java.util.Map<?,?> fields) {
+        ProviderSession session = ProviderSession.fromBridge(fields, deezer.arl);
+        if (session == null) return false;
+        deezer.adoptSession(session); authorized = true; return true;
     }
 
     boolean matchesSession(String arl) { return Objects.equals(deezer.arl, arl); }

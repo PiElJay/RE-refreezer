@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
 
 import '../service/audio_service.dart';
+import '../utils/mediaitem_converter.dart';
 import '../settings.dart';
 import '../translations.i18n.dart';
 import '../ui/router.dart';
@@ -104,19 +105,14 @@ class _PlayerBarState extends State<PlayerBar> {
                   leading: CachedImage(
                     width: 50,
                     height: 50,
-                    url:
-                        GetIt.I<AudioPlayerHandler>()
-                            .mediaItem
-                            .value
-                            ?.extras?['thumb'] ??
-                        GetIt.I<AudioPlayerHandler>().mediaItem.value?.artUri,
+                    url: MediaItemConverter.artworkUrl(GetIt.I<AudioPlayerHandler>().mediaItem.value),
                   ),
                   title: Text(
                     GetIt.I<AudioPlayerHandler>()
                             .mediaItem
                             .value
                             ?.displayTitle ??
-                        '',
+                        GetIt.I<AudioPlayerHandler>().mediaItem.value?.title ?? '',
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),
@@ -125,7 +121,7 @@ class _PlayerBarState extends State<PlayerBar> {
                             .mediaItem
                             .value
                             ?.displaySubtitle ??
-                        '',
+                        GetIt.I<AudioPlayerHandler>().mediaItem.value?.artist ?? '',
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),

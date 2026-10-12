@@ -619,6 +619,27 @@ class AudioPlayerHandler extends BaseAudioHandler
     return AudioSource.uri(Uri.parse(url), tag: mi);
   }
 
+  Map<String, String>? _appliedPlaybackSession;
+  Map<String, String>? _pendingPlaybackSession;
+  Future<void>? _sessionTransfer;
+  Future<void> _syncPlaybackSession() {
+    final session = deezerAPI.playbackSession;
+    if (session == null || mapEquals(_appliedPlaybackSession, session)) return Future.value();
+    if (_sessionTransfer != null && mapEquals(_pendingPlaybackSession, session)) return _sessionTransfer!;
+    final previous = _sessionTransfer ?? Future<void>.value();
+    _pendingPlaybackSession = session;
+    late final Future<void> operation;
+    operation = previous.then((_) async {
+      if (deezerAPI.arl != session['arl']) return;
+      final applied = await DownloadManager.platform.invokeMethod<bool>('setStreamingSession', {'session': session});
+      if (applied == true && deezerAPI.arl == session['arl']) _appliedPlaybackSession = session;
+    }).catchError((Object _) { AppDiagnostics.instance.record('sessionBridge', 'TRANSFER_FAILED'); }).whenComplete(() {
+      if (identical(_sessionTransfer, operation)) { _sessionTransfer = null; _pendingPlaybackSession = null; }
+    });
+    _sessionTransfer = operation;
+    return operation;
+  }
+
   Future _getTrackUrl(
     MediaItem mediaItem, {
     bool preferLocal = true,
@@ -642,6 +663,8 @@ class AudioPlayerHandler extends BaseAudioHandler
     if (mediaItem.extras?['showUrl'] != null) {
       return mediaItem.extras?['showUrl'];
     }
+
+    await _syncPlaybackSession();
 
     //Due to current limitations of just_audio, quality fallback moved to DeezerDataSource in ExoPlayer
     //This just returns fake url that contains metadata
@@ -916,7 +939,9 @@ class AudioPlayerHandler extends BaseAudioHandler
     } catch (_) {}
     AppDiagnostics.instance.record('stream', code);
     await Fluttertoast.showToast(
-      msg: 'Audio non disponibile: $code. Apri Impostazioni > Diagnostica.',
+      msg: code == 'MEDIA_LICENSE_RIGHTS_DENIED'
+          ? 'Deezer rifiuta i diritti della licenza per questo flusso audio. Dettagli in Diagnostica.'
+          : 'Audio non disponibile: $code. Apri Impostazioni > Diagnostica.',
     );
     return fatal;
   }
@@ -1094,18 +1119,15 @@ class AudioPlayerHandler extends BaseAudioHandler
           }
 
           Map<String, dynamic> json = jsonDecode(fileContent);
-          List<MediaItem> savedQueue = (json['queue'] ?? [])
-              .map<MediaItem>((mi) => (MediaItemConverter.mediaItemFromMap(mi)))
-              .toList();
-
-          final int lastIndex = json['index'] ?? 0;
-          final Duration lastPos = Duration(
-            milliseconds: json['position'] ?? 0,
-          );
+          final restored = MediaItemConverter.restoreQueue(json);
+          final savedQueue = restored.items;
+          final lastIndex = restored.index;
+          final lastPos = restored.position;
           queueSource = QueueSource.fromJson(json['queueSource'] ?? {});
           _sourceOffset = json['sourceOffset'] ?? savedQueue.length;
           _sourceExhausted = json['sourceExhausted'] ?? false;
-          var repeatType = LoopMode.values[(json['loopMode'] ?? 0)];
+          final loopIndex = json['loopMode'] is num ? (json['loopMode'] as num).toInt().clamp(0, LoopMode.values.length - 1) : 0;
+          var repeatType = LoopMode.values[loopIndex];
 
           await _player.setLoopMode(repeatType);
 

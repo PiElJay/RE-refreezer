@@ -12,6 +12,7 @@ nanohttpd_jar="${jars[0]}"
 classes_dir="$(mktemp -d)"
 trap 'rm -rf "$classes_dir"' EXIT
 javac -cp "$nanohttpd_jar" -d "$classes_dir" \
+  "$repo_root/android/app/src/main/java/r/r/refreezer/ProviderSession.java" \
   "$repo_root/android/app/src/main/java/r/r/refreezer/ByteRange.java" \
   "$repo_root/android/app/src/main/java/r/r/refreezer/StreamServer.java" \
   "$repo_root/test/native/offline_stubs/Deezer.java" \

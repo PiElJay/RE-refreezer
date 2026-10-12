@@ -70,3 +70,17 @@ The provider's localized login links now redirect to `https://account.deezer.com
 The email/password method is unavailable in a build lacking Deezer application credentials: the UI explains the configuration issue before collecting a password and the API rejects it before making any HTTP requests. It does not report a password error in that case.
 
 Five additional regression tests cover host-only cookies, failed cookie scopes, empty sessions, stopping at the first session and the unconfigured email method. Authenticated browser sign-in must still be checked on a device; public URL retrieval from the build environment is blocked by its network gateway.
+
+### Playback and diagnostics repair (0.8.2)
+
+Queue loads pass the selected initial index to just_audio in one operation. The old clear/addAll/seek sequence could preload an unavailable first track and abort before reaching the selected track. Local audio requests use the IPv4 address bound by the native server. Catalog lists missing track tokens keep their queue entries; native streaming refreshes metadata for the opened track rather than fetching the entire list concurrently.
+
+Gateway calls await initial session authorization, retain the provider SESSION_ID, coalesce authorization calls, bound CSRF refresh to one retry and report HTTP/JSON/provider failures as structured codes. String and numeric IDs are normalized. Missing streaming-license options do not invalidate library browsing. A provider HTTP rejection no longer implies that the phone is offline.
+
+Track conversion tolerates empty artist lists, absent lyrics and mixed numeric/string duration metadata. Native authorization failures remain failures; license and provider stream refusals are reported without attempting the obsolete generated-URL fallback. Network reads have timeouts. Offline byte ranges use inclusive ends, support suffixes, reject invalid bounds and close their file handles.
+
+Settings > Diagnostica checks the session, native bridge and loopback health endpoint. It copies a bounded report of status codes without credentials, token values, account identifiers, response bodies or query parameters. Initialization errors offer diagnostics/retry instead of rendering a partially initialized app or waiting forever.
+
+Regression coverage: 33 Flutter tests, 5,065 byte-range assertions and nine HTTP checks against the actual StreamServer with the remote provider replaced by a fixture that fails if called. These checks do not validate authenticated Deezer streaming or entitlement on a real device. The account website was inaccessible from the interactive test environment; no account password was stored in source, logs, fixtures or CI.
+
+GitHub Actions now performs bootstrap, analysis, tests and the ARM64 debug build on pushes to the work branch and pull requests. Its uploaded APK is a debug artifact and does not require signing secrets or account credentials.

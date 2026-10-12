@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../settings.dart';
+import 'app_diagnostics.dart';
 
 /// Connection state is transient: it must never overwrite a user's library.
 class NetworkMonitor extends ValueNotifier<bool> {
@@ -33,7 +34,9 @@ class NetworkMonitor extends ValueNotifier<bool> {
         final response = await http
             .get(Uri.https('api.deezer.com', '/infos'))
             .timeout(const Duration(seconds: 4));
-        online = response.statusCode == 200;
+        // A provider rejection is not evidence of airplane mode.
+        online = response.statusCode >= 200 && response.statusCode < 600;
+        AppDiagnostics.instance.record('networkProbe', 'REACHABLE', httpStatus: response.statusCode);
       }
     } catch (_) {
       /* No Internet, including captive Wi-Fi. */
@@ -41,6 +44,12 @@ class NetworkMonitor extends ValueNotifier<bool> {
     if (generation != _generation) return;
     settings.offlineMode = !online;
     value = online;
+  }
+
+  void recordProviderSuccess() {
+    _generation++;
+    settings.offlineMode = false;
+    value = true;
   }
 
   void stopMonitoring() {

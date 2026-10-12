@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.InputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.net.URL;
@@ -49,6 +50,9 @@ public class Deezer {
     String licenseToken;
     String contentLanguage = "en";
     boolean authorized = false;
+    volatile String lastErrorCode = "NONE";
+    volatile int lastHttpStatus = 0;
+    volatile boolean fatalStreamError = false;
     boolean authorizing = false;
 
     Deezer() {}
@@ -66,17 +70,17 @@ public class Deezer {
     //public native void decryptFile(String trackId, String inputFilename, String outputFilename);
 
     //Authorize GWLight API
-    public void authorize() {
-        if (!authorized || sid == null || token == null) {
-            authorizing = true;
-            try {
-                callGWAPI("deezer.getUserData", "{}");
-                authorized = true;
-            } catch (Exception e) {
-                logger.warn("Error authorizing to Deezer API! " + e);
-            }
-        }
-        authorizing = false;
+    public synchronized boolean authorize() {
+        if (authorized && sid != null && token != null && !token.equals("null")) return true;
+        authorizing = true;
+        try { callGWAPI("deezer.getUserData", "{}"); authorized = true; }
+        catch (Exception e) {
+            authorized = false;
+            if (lastErrorCode.equals("NONE")) lastErrorCode = "GW_AUTHORIZATION_FAILED";
+            fatalStreamError = true;
+            logger.warn("Deezer authorization failed: " + lastErrorCode);
+        } finally { authorizing = false; }
+        return authorized;
     }
 
     //Make POST request
@@ -86,7 +90,8 @@ public class Deezer {
         try {
             URL url = new URL(_url);
             HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-            connection.setConnectTimeout(20000);
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
             connection.setDoOutput(true);
             connection.setRequestMethod("POST");
             connection.setRequestProperty("User-Agent", USER_AGENT);
@@ -108,57 +113,57 @@ public class Deezer {
                 }
             }
 
-            //Get response
-            try (Scanner scanner = new Scanner(connection.getInputStream())) {
+            lastHttpStatus = connection.getResponseCode();
+            if (lastHttpStatus >= 400) {
+                lastErrorCode = url.getHost().equals("media.deezer.com") ? "MEDIA_HTTP_" + lastHttpStatus : "GW_HTTP_" + lastHttpStatus;
+                fatalStreamError = lastHttpStatus == 401 || lastHttpStatus == 403;
+            }
+            InputStream responseStream = lastHttpStatus >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            if (responseStream == null) return null;
+            try (Scanner scanner = new Scanner(responseStream)) {
                 StringBuilder output = new StringBuilder();
                 while (scanner.hasNext()) {
                     output.append(scanner.nextLine());
                 }
                 result = output.toString();
             }
+            connection.disconnect();
         } catch (Exception e) {
-            e.printStackTrace();
-            logger.error("Error posting Deezer request: " + e);
+            lastErrorCode = "PROVIDER_NETWORK_ERROR";
+            logger.error("Deezer request failed: " + e.getClass().getSimpleName());
         }
-
         return result;
     }
 
     public JSONObject callGWAPI(String method, String body) throws Exception {
-        //Get token
-        if (token == null) {
-            token = "null";
-            callGWAPI("deezer.getUserData", "{}");
+        if (token == null && !method.equals("deezer.getUserData")) {
+            if (!authorize()) throw new IOException("GW_AUTHORIZATION_FAILED");
         }
-
-        // Construct cookie header
         Map<String, String> cookies = new HashMap<>();
         cookies.put("Cookie", "arl=" + arl + (sid == null ? "" : "; sid=" + sid));
-
-        String data = POST(
-                "https://www.deezer.com/ajax/gw-light.php?method=" + method + "&input=3&api_version=1.0&api_token=" + token,
-                body,
-                cookies
-        );
-
-        //Parse JSON
+        String data = POST("https://www.deezer.com/ajax/gw-light.php?method=" + method
+                + "&input=3&api_version=1.0&api_token=" + (token == null ? "null" : token), body, cookies);
+        if (data == null) throw new IOException("GW_NO_RESPONSE");
         JSONObject out = new JSONObject(data);
-
-        //Save token
-        if ((token == null || token.equals("null")) && method.equals("deezer.getUserData")) {
-            token = out.getJSONObject("results").getString("checkForm");
-            sid = out.getJSONObject("results").getString("SESSION_ID");
-
-            // Get User license code
-            try {
-                JSONObject userData = out.getJSONObject("results").getJSONObject("USER");
-                licenseToken = userData.getJSONObject("OPTIONS").getString("license_token");
-            } catch (JSONException e) {
-                e.printStackTrace();
-                logger.warn("Error getting user License Token - FLAC not available! " + e);
-            }
+        Object error = out.opt("error");
+        if ((error instanceof JSONObject && ((JSONObject)error).length() > 0)
+                || (error instanceof JSONArray && ((JSONArray)error).length() > 0)) {
+            lastErrorCode = "GW_PROVIDER_ERROR";
+            throw new IOException(lastErrorCode);
         }
-
+        if (method.equals("deezer.getUserData")) {
+            JSONObject results = out.getJSONObject("results");
+            JSONObject user = results.getJSONObject("USER");
+            String userId = user.optString("USER_ID", "0");
+            if (userId.isEmpty() || userId.equals("0")) {
+                lastErrorCode = "GW_NOT_AUTHENTICATED"; fatalStreamError = true;
+                throw new IOException(lastErrorCode);
+            }
+            token = results.optString("checkForm", ""); sid = results.optString("SESSION_ID", "");
+            if (token.isEmpty()) throw new IOException("GW_TOKEN_MISSING");
+            JSONObject options = user.optJSONObject("OPTIONS");
+            licenseToken = options == null ? null : options.optString("license_token", null);
+        }
         return out;
     }
 
@@ -322,8 +327,23 @@ public class Deezer {
     // Returns URL and whether encrypted
     public Pair<String, Boolean> getTrackUrl(String trackId, String trackToken, String md5origin, String mediaVersion,
             int quality, int refreshAttempt) {
-        // Legit url gen
-        if (this.licenseToken != null && (quality > 0)) {
+        if (licenseToken == null || licenseToken.isEmpty()) {
+            lastErrorCode = "MEDIA_LICENSE_NOT_PROVIDED"; fatalStreamError = true;
+            return new Pair<String, Boolean>(null, true);
+        }
+        if ((trackToken == null || trackToken.isEmpty() || trackToken.equals("null")) && refreshAttempt < 1) {
+            try {
+                JSONObject response = callGWAPI("song.getListData", "{\"sng_ids\": [\"" + trackId + "\"]}");
+                JSONObject data = response.getJSONObject("results").getJSONArray("data").getJSONObject(0);
+                trackToken = data.optString("TRACK_TOKEN", ""); md5origin = data.optString("MD5_ORIGIN", "");
+                mediaVersion = data.optString("MEDIA_VERSION", "");
+                if (trackToken.isEmpty()) { lastErrorCode = "TRACK_METADATA_MISSING"; return new Pair<String, Boolean>(null, true); }
+            } catch (Exception e) {
+                if (lastErrorCode.equals("NONE")) lastErrorCode = "TRACK_METADATA_FAILED";
+                return new Pair<String, Boolean>(null, true);
+            }
+        }
+        if (quality > 0) {
             String url = null;
             String format = "FLAC";
 
@@ -354,6 +374,7 @@ public class Deezer {
                             JSONArray errors = data.getJSONArray("errors");
                             for (int j = 0; j < errors.length(); j++) {
                                 JSONObject error = errors.getJSONObject(j);
+                                lastErrorCode = "MEDIA_ERROR_" + error.optInt("code", 0);
                                 if (error.getInt("code") == 2001 && refreshAttempt < 1) {
                                     // Track token is expired, attempt 1 track data refresh
                                     JSONObject privateJson = callGWAPI("song.getListData", "{\"sng_ids\": [" + trackId + "]}");
@@ -367,7 +388,7 @@ public class Deezer {
                                     return getTrackUrl(trackId, trackToken, md5origin, mediaVersion, quality, refreshAttempt + 1);
                                 }
                             }
-                            logger.warn("Failed in getting streaming URL: " + data.get("errors"));
+                            logger.warn("Deezer refused stream: " + lastErrorCode);
                         }
                         if (data.has("media") && data.getJSONArray("media").length() > 0){
                             url = data.getJSONArray("media").getJSONObject(0).getJSONArray("sources").getJSONObject(0).getString("url");
@@ -377,12 +398,13 @@ public class Deezer {
                 }
             } catch (Exception e) {
                 e.printStackTrace();
-                logger.warn("Error getting streaming URL: " + e);
+                if (lastErrorCode.equals("NONE")) lastErrorCode = "MEDIA_INVALID_RESPONSE";
+                logger.warn("Streaming response failed: " + e.getClass().getSimpleName());
             }
             return new Pair<String, Boolean>(url,true);
         }
-        // Deprecated Legacy url generation. Seems unavailable now, will probably remove it at some point.
-        return new Pair<String, Boolean>(generateTrackUrl(trackId, md5origin, mediaVersion, quality), true);
+        lastErrorCode = "MEDIA_QUALITY_UNAVAILABLE";
+        return new Pair<String, Boolean>(null, true);
     }
 
     public static String sanitize(String input) {
@@ -666,6 +688,7 @@ public class Deezer {
                 quality = initialQuality;
             }
 
+            if (deezer.fatalStreamError) return null;
             //Track ID Fallback
             JSONObject privateJson = null;
             try {
@@ -703,14 +726,16 @@ public class Deezer {
                 //Create HEAD requests to check if exists
                 URL url = new URL(urlGen.first);
                 HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+                connection.setConnectTimeout(10000);
+                connection.setReadTimeout(10000);
                 connection.setRequestMethod("HEAD");
                 connection.setRequestProperty("User-Agent", USER_AGENT);
                 connection.setRequestProperty("Accept-Language", "*");
                 connection.setRequestProperty("Accept", "*/*");
-                urlResponseCode = connection.getResponseCode();
+                urlResponseCode = connection.getResponseCode(); connection.disconnect();
             }
-            //Track not available
-            if (urlResponseCode > 400) {
+            if (deezer.fatalStreamError) return null;
+            if (urlResponseCode >= 400 && urlResponseCode != 405) {
                 logger.warn("Quality fallback, response code: " + urlResponseCode + ", current: " + quality);
                 //-1 if no quality available
                 if (quality == 1) {

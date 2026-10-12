@@ -1,5 +1,7 @@
 package r.r.refreezer;
 
+import java.io.IOException;
+
 import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -196,9 +198,21 @@ public class MainActivity extends AudioServiceActivity {
                     String offlinePath = getExternalFilesDir("offline").getAbsolutePath();
                     //Start server
                     streamServer = new StreamServer(call.argument("arl"), offlinePath);
-                    streamServer.start();
+                    try { streamServer.start(); }
+                    catch (IOException e) {
+                        streamServer = null;
+                        result.error("SERVER_BIND_FAILED", "Local audio server could not start", null); return;
+                    }
                 }
                 result.success(null);
+                return;
+            }
+            if (call.method.equals("getPlaybackDiagnostics")) {
+                if (streamServer != null) result.success(streamServer.diagnostics());
+                else {
+                    HashMap<String, Object> data = new HashMap<>(); data.put("errorCode", "SERVER_NOT_STARTED");
+                    data.put("ready", false); data.put("fatal", true); result.success(data);
+                }
                 return;
             }
             //Get quality info from stream

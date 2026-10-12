@@ -61,11 +61,11 @@ class Track {
   MediaItem toMediaItem() => MediaItem(
           title: title ?? '',
           album: album?.title ?? '',
-          artist: artists?[0].name,
+          artist: artists?.isNotEmpty == true ? artists!.first.name : null,
           displayTitle: title,
           displaySubtitle: artistString,
           displayDescription: album?.title,
-          artUri: Uri.parse(albumArt?.full ?? ''),
+          artUri: albumArt?.full?.isNotEmpty == true ? Uri.parse(albumArt!.full!) : null,
           duration: duration,
           id: id ?? '',
           extras: {
@@ -86,9 +86,8 @@ class Track {
     List<Artist> artists = [Artist(name: mi.displaySubtitle ?? mi.artist)];
     album.id = mi.extras?['albumId'];
     if (mi.extras?['artists'] != null) {
-      artists = jsonDecode(mi.extras?['artists'])
-          .map<Artist>((j) => Artist.fromJson(j))
-          .toList();
+      final decodedArtists = jsonDecode(mi.extras?['artists']);
+      if (decodedArtists is List) artists = decodedArtists.whereType<Map<String, dynamic>>().map(Artist.fromJson).toList();
     }
     List<String>? playbackDetails;
     if (mi.extras?['playbackDetails'] != null) {
@@ -114,10 +113,18 @@ class Track {
             fullUrl: mi.artUri.toString(), thumbUrl: mi.extras?['thumb']),
         duration: mi.duration,
         playbackDetails: playbackDetails,
-        lyrics: LyricsFull.fromJson(
-            jsonDecode(((mi.extras ?? {})['lyrics']) ?? '{}')),
+        lyrics: _mediaItemLyrics(mi),
         fallback: fallback,
         playbackDetailsFallback: playbackDetailsFallback);
+  }
+
+  static LyricsFull? _mediaItemLyrics(MediaItem item) {
+    final value = item.extras?['lyrics'];
+    if (value == null) return null;
+    try {
+      final decoded = value is String ? jsonDecode(value) : value;
+      return decoded is Map<String, dynamic> ? LyricsFull.fromJson(decoded) : null;
+    } catch (_) { return null; }
   }
 
   //JSON
@@ -130,7 +137,7 @@ class Track {
     return Track(
       id: json['SNG_ID'].toString(),
       title: title,
-      duration: Duration(seconds: int.parse(json['DURATION'])),
+      duration: Duration(seconds: int.tryParse('${json['DURATION']}') ?? 0),
       albumArt: ImageDetails.fromPrivateString(json['ALB_PICTURE']),
       album: Album.fromPrivateJson(json),
       artists: (json['ARTISTS'] ?? [json])
@@ -144,9 +151,9 @@ class Track {
       ],
       lyrics: LyricsFull(id: json['LYRICS_ID']?.toString() ?? ''),
       favorite: favorite,
-      diskNumber: int.parse(json['DISK_NUMBER'] ?? '1'),
+      diskNumber: int.tryParse('${json['DISK_NUMBER'] ?? 1}') ?? 1,
       explicit: (json['EXPLICIT_LYRICS'].toString() == '1') ? true : false,
-      addedDate: json['DATE_ADD'],
+      addedDate: int.tryParse('${json['DATE_ADD']}'),
       fallback: (json['FALLBACK'] != null)
           ? Track.fromPrivateJson(json['FALLBACK'])
           : null,
@@ -458,11 +465,11 @@ class Playlist {
       Playlist(
           id: json['PLAYLIST_ID'].toString(),
           title: json['TITLE'],
-          trackCount: json['NB_SONG'] ?? songsJson['total'],
+          trackCount: int.tryParse('${json['NB_SONG'] ?? songsJson['total']}'),
           image: ImageDetails.fromPrivateString(json['PLAYLIST_PICTURE'],
               type: json['PICTURE_TYPE']),
           fans: json['NB_FAN'],
-          duration: Duration(seconds: json['DURATION'] ?? 0),
+          duration: Duration(seconds: int.tryParse('${json['DURATION']}') ?? 0),
           description: json['DESCRIPTION'],
           user: User(
               id: json['PARENT_USER_ID'],

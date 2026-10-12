@@ -20,6 +20,8 @@ import 'api/deezer.dart';
 import 'api/definitions.dart';
 import 'api/download.dart';
 import 'service/audio_service.dart';
+import 'service/app_diagnostics.dart';
+import 'ui/diagnostics_screen.dart';
 import 'service/network_monitor.dart';
 import 'service/service_locator.dart';
 import 'settings.dart';
@@ -248,10 +250,15 @@ class _MainScreenState extends State<MainScreen>
       });
     }
 
+    if (!NetworkMonitor.instance.offline) await deezerAPI.authorize();
     _preloadFavoriteTracksToCache();
+    AppDiagnostics.instance.record('startup', 'DOWNLOAD_MANAGER');
     await _initDownloadManager();
+    AppDiagnostics.instance.record('startup', 'LOCAL_AUDIO_SERVER');
     await _startStreamingServer();
+    AppDiagnostics.instance.record('startup', 'AUDIO_SERVICE');
     await _setupServiceLocator();
+    AppDiagnostics.instance.record('startup', 'READY');
 
     //Do on BG
     GetIt.I<AudioPlayerHandler>().authorizeLastFM();
@@ -454,6 +461,18 @@ class _MainScreenState extends State<MainScreen>
     return FutureBuilder(
       future: _initialization,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          AppDiagnostics.instance.record('startup', 'INITIALIZATION_FAILED');
+          return Scaffold(body: SafeArea(child: Center(child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('Avvio del player non riuscito.'), const SizedBox(height: 16),
+              FilledButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const DiagnosticsScreen())), child: const Text('Apri diagnostica')),
+              TextButton(onPressed: () => setState(() => _initialization = _init()), child: const Text('Riprova')),
+            ]),
+          ))));
+        }
         // Check _initialization status
         if (snapshot.connectionState == ConnectionState.done) {
           // When _initialization is done, render app

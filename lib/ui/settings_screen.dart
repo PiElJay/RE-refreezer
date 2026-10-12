@@ -24,6 +24,7 @@ import 'package:refreezer/ui/log_screen.dart';
 import 'package:scrobblenaut/scrobblenaut.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
+import 'diagnostics_screen.dart';
 import '../api/cache.dart';
 import '../fonts/refreezer_icons.dart';
 import '../main.dart';
@@ -53,6 +54,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: FreezerAppBar('Settings'.i18n),
       body: ListView(
         children: <Widget>[
+          ListTile(title: const Text('Diagnostica'),
+            subtitle: const Text('Sessione Deezer, connessione e player'),
+            leading: const LeadingIcon(Icons.bug_report_outlined, color: Color(0xff9b6dff)),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DiagnosticsScreen())),
+          ),
           ListTile(
             title: Text('General'.i18n),
             leading: const LeadingIcon(

@@ -18,6 +18,9 @@ import 'package:rxdart/rxdart.dart';
 import 'package:scrobblenaut/scrobblenaut.dart';
 
 import 'network_monitor.dart';
+import 'audio_queue_loader.dart';
+import 'app_diagnostics.dart';
+import '../api/download.dart';
 import 'queue_selection.dart';
 import '../api/cache.dart';
 import '../api/deezer.dart';
@@ -45,7 +48,10 @@ Future<AudioPlayerHandler> initAudioService() async {
 class AudioPlayerHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
   AudioPlayerHandler() {
-    _init();
+    _initialization = _init();
+    unawaited(_initialization.catchError((Object _) {
+      AppDiagnostics.instance.record('playerInitialization', 'FAILED');
+    }));
   }
 
   int? _audioSession;
@@ -55,10 +61,9 @@ class AudioPlayerHandler extends BaseAudioHandler
   final AndroidAuto _androidAuto =
       AndroidAuto(); // Create an instance of AndroidAuto
 
-  // for some reason, dart can decide not to respect the 'await' due to weird task sceduling ...
-  final Completer<void> _playerInitializedCompleter = Completer<void>();
+  late final Future<void> _initialization;
   late AudioPlayer _player;
-  final _playlist = ConcatenatingAudioSource(children: []);
+  var _playlist = ConcatenatingAudioSource(children: []);
   // Prevent MediaItem change while shuffling or otherwise rearranging the queue by just_audio internals
   bool _rearranging = false;
 
@@ -108,7 +113,6 @@ class AudioPlayerHandler extends BaseAudioHandler
 
   Future<void> _init() async {
     await _startSession();
-    _playerInitializedCompleter.complete();
 
     // Broadcast the current queue when just_audio sequence changes.
     // Only emit value when MediaItem list contents is different from previous queue
@@ -278,7 +282,7 @@ class AudioPlayerHandler extends BaseAudioHandler
 
   @override
   Future<void> play() async {
-    _player.play();
+    unawaited(_player.play().catchError((Object error) { _playbackError(error); }));
 
     //Scrobble to LastFM
     MediaItem? newMediaItem = mediaItem.value;
@@ -618,7 +622,7 @@ class AudioPlayerHandler extends BaseAudioHandler
     if (preferLocal && await f.exists() && await f.length() > 0) {
       //return f.path;
       //Stream server URL
-      return 'http://localhost:36958/?id=${mediaItem.id}';
+      return 'http://127.0.0.1:36958/?id=${mediaItem.id}';
     }
 
     if (NetworkMonitor.instance.offline) return null;
@@ -632,24 +636,33 @@ class AudioPlayerHandler extends BaseAudioHandler
     //This just returns fake url that contains metadata
     int quality = streamQuality ?? await getStreamQuality();
 
-    List? streamPlaybackDetails = jsonDecode(
-      mediaItem.extras?['playbackDetails'],
-    );
+    List? streamPlaybackDetails = _playbackDetails(mediaItem.extras?['playbackDetails']);
     String streamItemId = mediaItem.id;
 
     //If Deezer provided a FALLBACK track, use the playbackDetails and id from the fallback track
     //for streaming (original stream unavailable)
     if (mediaItem.extras?['fallbackId'] != null) {
       streamItemId = mediaItem.extras?['fallbackId'];
-      streamPlaybackDetails = jsonDecode(
-        mediaItem.extras?['playbackDetailsFallback'],
-      );
+      streamPlaybackDetails = _playbackDetails(mediaItem.extras?['playbackDetailsFallback']);
     }
 
-    if ((streamPlaybackDetails ?? []).length < 3) return null;
-    String url =
-        'http://localhost:36958/?q=$quality&id=${mediaItem.id}&streamTrackId=$streamItemId&trackToken=${streamPlaybackDetails?[2]}&mv=${streamPlaybackDetails?[1]}&md5origin=${streamPlaybackDetails?[0]}';
-    return preferLocal ? url : '$url&forceOnline=1';
+    // Missing catalog tokens are refreshed by the server only when opened.
+    final details = List<dynamic>.of(streamPlaybackDetails ?? []);
+    while (details.length < 3) { details.add(null); }
+    return Uri.http('127.0.0.1:36958', '/', {
+      'q': quality.toString(), 'id': mediaItem.id,
+      'streamTrackId': streamItemId,
+      'trackToken': details[2]?.toString() ?? '',
+      'mv': details[1]?.toString() ?? '', 'md5origin': details[0]?.toString() ?? '',
+      if (!preferLocal) 'forceOnline': '1',
+    }).toString();
+  }
+
+  List? _playbackDetails(dynamic value) {
+    if (value is List) return value;
+    if (value is! String) return null;
+    try { final decoded = jsonDecode(value); return decoded is List ? decoded : null; }
+    catch (_) { return null; }
   }
 
   /// Get requested stream quality based on connection and settings.
@@ -693,12 +706,8 @@ class AudioPlayerHandler extends BaseAudioHandler
     try {
       _requestedIndex = resolved;
       await _player.setShuffleModeEnabled(false);
-      await _playlist.clear();
-      await _playlist.addAll(sources);
-      await _player.seek(
-        matching >= 0 ? position : Duration.zero,
-        index: resolved,
-      );
+      _playlist = await loadAudioQueue(_player, sources, resolved,
+          position: matching >= 0 ? position : Duration.zero);
     } finally {
       _requestedIndex = -1;
       _rearranging = false;
@@ -738,14 +747,17 @@ class AudioPlayerHandler extends BaseAudioHandler
       try {
         await _player.setShuffleModeEnabled(false);
         _requestedIndex = resolved;
-        await _playlist.clear();
-        await _playlist.addAll(sources);
-        await _player.seek(Duration.zero, index: resolved);
         queueSource = newQueueSource;
+        _playlist = await loadAudioQueue(_player, sources, resolved);
         _sourceOffset = newQueue.length;
         _sourceExhausted = false;
         _failedIndices.clear();
         _retriedIds.clear();
+        AppDiagnostics.instance.record('player', 'QUEUE_LOADED');
+      } catch (_) {
+        AppDiagnostics.instance.record('player', 'SOURCE_LOAD_FAILED');
+        await _showPlaybackFailure();
+        return;
       } finally {
         _requestedIndex = -1;
         _rearranging = false;
@@ -843,7 +855,27 @@ class AudioPlayerHandler extends BaseAudioHandler
         err.message == 'Connection aborted') {
       return;
     }
-    unawaited(_recoverPlayback());
+    unawaited(_handlePlaybackError());
+  }
+
+  Future<void> _handlePlaybackError() async {
+    if (_rearranging) return;
+    if (await _showPlaybackFailure()) { await pause(); return; }
+    await _recoverPlayback();
+  }
+
+  Future<bool> _showPlaybackFailure() async {
+    String code = 'SOURCE_UNAVAILABLE';
+    bool fatal = false;
+    try {
+      final data = await DownloadManager.platform.invokeMapMethod<String, dynamic>('getPlaybackDiagnostics');
+      final candidate = data?['errorCode'];
+      if (candidate is String && candidate != 'NONE' && RegExp(r'^[A-Z0-9_]{1,64}$').hasMatch(candidate)) code = candidate;
+      fatal = data?['fatal'] == true;
+    } catch (_) {}
+    AppDiagnostics.instance.record('stream', code);
+    await Fluttertoast.showToast(msg: 'Audio non disponibile: $code. Apri Impostazioni > Diagnostica.');
+    return fatal;
   }
 
   void _publishCurrentItem() {
@@ -993,7 +1025,7 @@ class AudioPlayerHandler extends BaseAudioHandler
   //----------------------------------------------------------------------------------------------
 
   Future<void> waitForPlayerInitialization() async {
-    await _playerInitializedCompleter.future;
+    await _initialization.timeout(const Duration(seconds: 20));
   }
 
   Future dispose() async {

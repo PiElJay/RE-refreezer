@@ -8,16 +8,27 @@ import 'package:logging/logging.dart';
 import '../api/definitions.dart';
 import '../api/spotify.dart';
 import '../settings.dart';
+import '../service/app_diagnostics.dart';
+import '../service/network_monitor.dart';
 
 DeezerAPI deezerAPI = DeezerAPI();
 
 class DeezerAPI {
-  DeezerAPI({this.arl});
+  DeezerAPI({String? arl, http.Client? client}) : _arl = arl, _client = client ?? http.Client();
+  final http.Client _client;
+  String? _arl;
+  String? get arl => _arl;
+  set arl(String? value) {
+    if (_arl == value) return;
+    _arl = value;
+    token = null; sid = null; licenseToken = null;
+    userId = null; userName = null; favoritesPlaylistId = null;
+    _authorizing = null;
+  }
 
   static const String userAgent =
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36';
 
-  String? arl;
   String? token;
   String? licenseToken;
   String? userId;
@@ -25,7 +36,7 @@ class DeezerAPI {
   String? favoritesPlaylistId;
   String? sid;
 
-  Future? _authorizing;
+  Future<bool>? _authorizing;
 
   //Get headers
   Map<String, String> get headers => {
@@ -47,53 +58,71 @@ class DeezerAPI {
         'Cookie': 'arl=$arl' + ((sid == null) ? '' : '; sid=$sid'),
       };
 
-  //Call private GW-light API
-  Future<Map<String, dynamic>> callGwApi(
-    String method, {
-    Map<String, dynamic>? params,
-    String? gatewayInput,
+  Future<Map<String, dynamic>> callGwApi(String method, {
+    Map<String, dynamic>? params, String? gatewayInput, bool retryToken = true,
   }) async {
-    //Generate URL
-    Uri uri = Uri.https('www.deezer.com', '/ajax/gw-light.php', {
-      'api_version': '1.0',
-      'api_token': token,
-      'input': '3',
-      'method': method,
-      'cid': Random().nextInt(1000000000).toString(),
-      //Used for homepage
+    if (method != 'deezer.getUserData' && token == null && !await authorize()) {
+      throw DeezerApiException(method, 'SESSION_UNAVAILABLE');
+    }
+    final uri = Uri.https('www.deezer.com', '/ajax/gw-light.php', {
+      'api_version': '1.0', 'api_token': token ?? 'null', 'input': '3',
+      'method': method, 'cid': Random().nextInt(1000000000).toString(),
       if (gatewayInput != null) 'gateway_input': gatewayInput,
     });
-    //Post
-    http.Response res = await http
-        .post(
-          uri,
-          headers: headers,
-          body: jsonEncode(params),
-        )
-        .timeout(const Duration(seconds: 10));
-    dynamic body = jsonDecode(res.body);
-    //Grab SID
-    if (method == 'deezer.getUserData' && res.headers['set-cookie'] != null) {
-      for (String cookieHeader in res.headers['set-cookie']!.split(';')) {
-        if (cookieHeader.startsWith('sid=')) {
-          sid = cookieHeader.split('=')[1];
-        }
+    final requestedArl = _arl;
+    http.Response res;
+    try {
+      res = await _client.post(uri, headers: headers, body: jsonEncode(params ?? {}))
+          .timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      AppDiagnostics.instance.record(method, 'TIMEOUT');
+      throw DeezerApiException(method, 'TIMEOUT');
+    } catch (_) {
+      AppDiagnostics.instance.record(method, 'NETWORK_ERROR');
+      throw DeezerApiException(method, 'NETWORK_ERROR');
+    }
+    if (_arl != requestedArl) throw DeezerApiException(method, 'SESSION_CHANGED');
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      AppDiagnostics.instance.record(method, 'HTTP_ERROR', httpStatus: res.statusCode);
+      throw DeezerApiException(method, 'HTTP_ERROR', httpStatus: res.statusCode);
+    }
+    Map<String, dynamic> body;
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is! Map<String, dynamic>) throw const FormatException();
+      body = decoded;
+    } catch (_) {
+      AppDiagnostics.instance.record(method, 'INVALID_JSON', httpStatus: res.statusCode);
+      throw DeezerApiException(method, 'INVALID_JSON', httpStatus: res.statusCode);
+    }
+    NetworkMonitor.instance.recordProviderSuccess();
+    if (method == 'deezer.getUserData') {
+      final results = body['results'];
+      final sessionId = results is Map ? results['SESSION_ID']?.toString() : null;
+      if (sessionId != null && sessionId.isNotEmpty) sid = sessionId;
+      else sid = RegExp(r'(?:^|[,;]\s*)sid=([^;,]+)')
+          .firstMatch(res.headers['set-cookie'] ?? '')?.group(1) ?? sid;
+    }
+    final error = body['error'];
+    if ((error is Map && error.isNotEmpty) || (error is List && error.isNotEmpty)) {
+      if (error is Map && error.containsKey('VALID_TOKEN_REQUIRED') &&
+          method != 'deezer.getUserData' && retryToken && await authorize()) {
+        return callGwApi(method, params: params, gatewayInput: gatewayInput, retryToken: false);
       }
+      final candidate = error is Map ? error.keys.first.toString() : 'PROVIDER_ERROR';
+      final code = RegExp(r'^[A-Z0-9_]{1,64}$').hasMatch(candidate) ? candidate : 'PROVIDER_ERROR';
+      AppDiagnostics.instance.record(method, code, httpStatus: res.statusCode);
+      throw DeezerApiException(method, code, httpStatus: res.statusCode);
     }
-    // In case of error "Invalid CSRF token" retrieve new one and retry the same call
-    // Except for "deezer.getUserData" method, which would cause infinite loop
-    if (body['error'].isNotEmpty &&
-        body['error'].containsKey('VALID_TOKEN_REQUIRED') &&
-        (method != 'deezer.getUserData' && await rawAuthorize())) {
-      return callGwApi(method, params: params, gatewayInput: gatewayInput);
-    }
+    AppDiagnostics.instance.record(method, 'OK', httpStatus: res.statusCode);
     return body;
   }
 
   Future<Map<dynamic, dynamic>> callPublicApi(String path) async {
-    http.Response res = await http.get(
+    http.Response res = await _client.get(
       Uri.parse('https://api.deezer.com/' + path),
-    );
+    ).timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200) throw DeezerApiException('public', 'HTTP_ERROR', httpStatus: res.statusCode);
     return jsonDecode(res.body);
   }
 
@@ -106,7 +135,7 @@ class DeezerAPI {
       'i': 'c',
     });
     //Post
-    http.Response res = await http.post(uri, headers: headers);
+    http.Response res = await _client.post(uri, headers: headers).timeout(const Duration(seconds: 10));
     dynamic body = jsonDecode(res.body);
     //Grab jwt token
     if (body['jwt']?.isNotEmpty) {
@@ -130,7 +159,7 @@ class DeezerAPI {
     //Uri uri = Uri.parse('https://pipe.deezer.com/api');
     Uri uri = Uri.https('pipe.deezer.com', '/api/');
     //Post
-    http.Response res = await http
+    http.Response res = await _client
         .post(
           uri,
           headers: pipeApiHeaders,
@@ -142,33 +171,38 @@ class DeezerAPI {
     return body;
   }
 
-  //Wrapper so it can be globally awaited
-  Future<bool> authorize() async {
-    return await (_authorizing ??= rawAuthorize().then((success) {
-      _authorizing = null;
-      return success;
-    }));
+  Future<bool> authorize() {
+    if (_authorizing != null) return _authorizing!;
+    final pending = rawAuthorize();
+    _authorizing = pending;
+    pending.whenComplete(() { if (identical(_authorizing, pending)) _authorizing = null; });
+    return pending;
   }
 
-  //Authorize, bool = success
   Future<bool> rawAuthorize({Function? onError}) async {
     try {
-      Map<dynamic, dynamic> data = await callGwApi('deezer.getUserData');
-      if (data['results']['USER']['USER_ID'] == 0) {
+      final data = await callGwApi('deezer.getUserData');
+      final results = data['results'];
+      final user = results is Map ? results['USER'] : null;
+      final id = user is Map ? user['USER_ID']?.toString() : null;
+      final form = results is Map ? results['checkForm']?.toString() : null;
+      if (id == null || id.isEmpty || id == '0' || form == null || form.isEmpty) {
+        token = null; userId = null; licenseToken = null;
+        AppDiagnostics.instance.record('session', 'NOT_AUTHENTICATED');
         return false;
-      } else {
-        token = data['results']['checkForm'];
-        userId = data['results']['USER']['USER_ID']?.toString() ?? '';
-        userName = data['results']['USER']['BLOG_NAME'];
-        favoritesPlaylistId = data['results']['USER']['LOVEDTRACKS_ID'];
-        licenseToken = data['results']['USER']['OPTIONS']['license_token'];
-        return true;
       }
+      token = form; userId = id;
+      userName = user['BLOG_NAME']?.toString() ?? '';
+      favoritesPlaylistId = user['LOVEDTRACKS_ID']?.toString();
+      final options = user['OPTIONS'];
+      licenseToken = options is Map ? options['license_token']?.toString() : null;
+      AppDiagnostics.instance.record('session', 'AUTHENTICATED');
+      AppDiagnostics.instance.record('streamLicense', licenseToken?.isNotEmpty == true ? 'PRESENT' : 'NOT_PROVIDED');
+      return true;
     } catch (e) {
-      if (onError != null) {
-        onError(e);
-      }
-      Logger.root.severe('Login Error (D): ' + e.toString());
+      if (onError != null) onError(e);
+      AppDiagnostics.instance.record('session', 'AUTHORIZATION_FAILED');
+      Logger.root.warning('Authorization failed (${e.runtimeType})');
       return false;
     }
   }
@@ -394,7 +428,7 @@ class DeezerAPI {
     final songsData = data['results']?['FAVORITES']?['SONGS']?['data'];
 
     if (songsData is List) {
-      return songsData.map<String>((song) => song['SNG_ID'] as String).toList();
+      return songsData.map<String>((song) => song['SNG_ID'].toString()).toList();
     }
     return null;
   }
@@ -799,4 +833,12 @@ class DeezerAPI {
         .map<ShowEpisode>((e) => ShowEpisode.fromPrivateJson(e))
         .toList();
   }
+}
+
+class DeezerApiException implements Exception {
+  final String operation;
+  final String code;
+  final int? httpStatus;
+  const DeezerApiException(this.operation, this.code, {this.httpStatus});
+  @override String toString() => 'Deezer: $operation - $code${httpStatus == null ? '' : ' (HTTP $httpStatus)'}';
 }

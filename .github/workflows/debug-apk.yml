@@ -1,4 +1,4 @@
-name: Verify and build debug APK
+name: Verify and build VYBE MUSIC APK
 on:
   push:
     branches: [feat/pieljay-player-refresh]
@@ -58,6 +58,6 @@ jobs:
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk artifacts/VYBE-MUSIC-1.0.0-arm64.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: PiElJay-refreezer-debug-arm64
+          name: VYBE-MUSIC-arm64
           path: artifacts/*.apk
           if-no-files-found: error

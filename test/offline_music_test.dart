@@ -29,6 +29,23 @@ class _Downloads extends DownloadManager {
   Future<bool> checkOffline({Album? album, Track? track, Playlist? playlist}) async => true;
 }
 
+class _MemoryLocal extends LocalMusicLibrary {
+  final List<LocalSong> songs = [];
+  @override
+  Future<List<LocalSong>> load() async => List.of(songs);
+  @override
+  Future<int> importSongs(List<LocalSong> incoming) async {
+    songs.addAll(incoming);
+    notifyListeners();
+    return incoming.length;
+  }
+  @override
+  Future<void> remove(String uri) async {
+    songs.removeWhere((song) => song.uri == uri);
+    notifyListeners();
+  }
+}
+
 void main() {
   late Directory directory;
   late LocalMusicLibrary local;
@@ -70,6 +87,10 @@ void main() {
   });
 
   testWidgets('an import updates Brani offline and plays its precise queue position', (tester) async {
+    // Persistence is exercised above with real files; the widget test keeps
+    // filesystem work outside Flutter's simulated animation clock.
+    final local = _MemoryLocal();
+    addTearDown(local.dispose);
     final handler = _Handler();
     GetIt.I.registerSingleton<AudioPlayerHandler>(handler);
     final previous = downloadManager;

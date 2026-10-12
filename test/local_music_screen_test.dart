@@ -30,10 +30,12 @@ void main() {
         home: LocalMusicScreen(library: library)));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Scansiona telefono'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Scansiona telefono')); await tester.pumpAndSettle();
       expect(find.text('1 nuovi brani · 1 esclusi o già presenti.'), findsOneWidget);
       expect(find.text('PTT-20261012.opus'), findsNothing);
       await tester.ensureVisible(find.text('Importa 1 brani'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Importa 1 brani')); await tester.pumpAndSettle();
       expect(library.songs.single.uri, 'content://media/external/audio/media/1');
       expect(tester.takeException(), isNull);

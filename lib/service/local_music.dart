@@ -30,7 +30,7 @@ class LocalSong {
   static bool isMusic(Map<dynamic, dynamic> row) {
     if (sourceUri(row['uri']) == null) return false;
     String location = '${row['path'] ?? ''}/${row['name'] ?? ''}';
-    try { location = Uri.decodeFull(location); } on FormatException { /* Raw file name can contain percent signs. */ }
+    try { location = Uri.decodeFull(location); } on ArgumentError { /* Raw file name can contain percent signs. */ } on FormatException { /* Invalid encoded paths retain their literal name. */ }
     location = location.toLowerCase().replaceAll('\\', '/');
     if (RegExp(r'whatsapp|voice notes|voice_notes|voicenotes|voice messages|recordings?|registrazioni|ringtones?|notifications?|alarms?|audiobooks?|podcasts?').hasMatch(location)) return false;
     if (RegExp(r'(^|/)(ptt|aud)-\d').hasMatch(location)) return false;

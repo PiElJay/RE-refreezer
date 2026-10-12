@@ -808,7 +808,7 @@ class AudioPlayerHandler extends BaseAudioHandler
         AppDiagnostics.instance.record('player', 'QUEUE_LOADED');
       } catch (_) {
         AppDiagnostics.instance.record('player', 'SOURCE_LOAD_FAILED');
-        await _showPlaybackFailure();
+        await _showPlaybackFailure(failedItem: newQueue[index]);
         return;
       } finally {
         _requestedIndex = -1;
@@ -919,8 +919,8 @@ class AudioPlayerHandler extends BaseAudioHandler
     await _recoverPlayback();
   }
 
-  Future<bool> _showPlaybackFailure() async {
-    if (mediaItem.value?.id.startsWith('local:') == true) {
+  Future<bool> _showPlaybackFailure({MediaItem? failedItem}) async {
+    if ((failedItem ?? mediaItem.value)?.id.startsWith('local:') == true) {
       AppDiagnostics.instance.record('localAudio', 'FILE_UNAVAILABLE');
       await Fluttertoast.showToast(msg: 'File locale non disponibile. Verifica accesso audio e posizione del file.');
       return false;

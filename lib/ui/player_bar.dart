@@ -83,7 +83,7 @@ class _PlayerBarState extends State<PlayerBar> {
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Container(
+              Material(
                 // For Android TV: indicate focus by grey
                 color: focusNode.hasFocus
                     ? Colors.black26

@@ -36,11 +36,11 @@ Future<AudioPlayerHandler> initAudioService() async {
     builder: () => AudioPlayerHandler(),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'r.r.refreezer.audio',
-      androidNotificationChannelName: 'ReFreezer',
+      androidNotificationChannelName: 'VYBE MUSIC',
       androidNotificationOngoing: true,
       androidStopForegroundOnPause: true,
       androidNotificationClickStartsActivity: true,
-      androidNotificationChannelDescription: 'ReFreezer',
+      androidNotificationChannelDescription: 'VYBE MUSIC',
       androidNotificationIcon: 'drawable/ic_logo',
     ),
   );

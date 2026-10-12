@@ -41,16 +41,17 @@ class _MusicDashboardState extends State<MusicDashboard> {
                 sliver: SliverToBoxAdapter(
                   child: Row(
                     children: [
+                      Padding(padding: const EdgeInsets.only(right: 12), child: ClipRRect(borderRadius: BorderRadius.circular(14), child: Image.asset('assets/vybe_music.png', width: 54, height: 54, semanticLabel: 'VYBE MUSIC'))),
                       const Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'LA TUA MUSICA · DEEZER',
+                              'VYBE MUSIC · DEEZER',
                               style: TextStyle(
                                 fontSize: 11,
                                 letterSpacing: 2,
-                                color: Color(0xffaa91d7),
+                                color: Color(0xff61d8ff),
                               ),
                             ),
                             SizedBox(height: 8),
@@ -110,8 +111,8 @@ class _MusicDashboardState extends State<MusicDashboard> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                Color(0xff54249a),
-                                Color(0xff252043),
+                                Color(0xff75144e),
+                                Color(0xff152d52),
                                 Color(0xff191922),
                               ],
                             ),

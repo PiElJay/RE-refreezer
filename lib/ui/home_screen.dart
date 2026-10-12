@@ -78,15 +78,15 @@ class FreezerTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Column(children: [
-            Text('ReFreezer',
-                style: TextStyle(fontSize: 42, fontWeight: FontWeight.w900)),
-            Text('PiElJay · Musica da Deezer', style: TextStyle(fontSize: 14)),
-          ])),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: Column(children: [
+        ClipRRect(borderRadius: BorderRadius.circular(24),
+          child: Image.asset('assets/vybe_music.png', width: 200, height: 200, semanticLabel: 'VYBE MUSIC')),
+        const SizedBox(height: 12),
+        const Text('VYBE MUSIC', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900)),
+        const Text('PiElJay · Musica da Deezer', style: TextStyle(fontSize: 14)),
+      ]),
     );
   }
 }

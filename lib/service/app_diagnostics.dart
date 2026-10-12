@@ -19,7 +19,7 @@ class AppDiagnostics extends ChangeNotifier {
   }
 
   String report() => [
-    'PiElJay - diagnostica 0.8.2',
+    'VYBE MUSIC - diagnostica 0.8.3',
     ..._state.entries.map((entry) => '${entry.key}: ${entry.value}'),
     '',
     ..._events,

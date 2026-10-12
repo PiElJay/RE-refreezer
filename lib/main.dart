@@ -55,7 +55,7 @@ void main() async {
 
 Future<void> prepareRun() async {
   await initializeLogging();
-  Logger.root.info('Starting ReFreezer App...');
+  Logger.root.info('Starting VYBE MUSIC...');
   settings = await Settings().loadSettings();
   await NetworkMonitor.instance.start();
   cache = await Cache.load();
@@ -107,7 +107,7 @@ class _ReFreezerAppState extends State<ReFreezerApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ReFreezer',
+      title: 'VYBE MUSIC',
       debugShowCheckedModeBanner: false,
       shortcuts: <ShortcutActivator, Intent>{
         ...WidgetsApp.defaultShortcuts,

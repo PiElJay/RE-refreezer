@@ -1830,13 +1830,13 @@ class _CreditsScreenState extends State<CreditsScreen> {
             title: const Text('GitHub · contribuisci con le tue idee'),
             subtitle: const Text('Proponi una funzione o segnala un problema'),
             leading: const Icon(Icons.code_rounded, color: Colors.green, size: 36),
-            onTap: () => launchUrlString('https://github.com/PiElJay/RE-refreezer/issues'),
+            onTap: () => launchUrlString('https://github.com/PiElJay/VYBE-MUSIC/issues'),
           ),
           ListTile(
             title: const Text('Lascia una stella su GitHub'),
             subtitle: const Text('Ti piace VYBE MUSIC? Sostieni il progetto con una stella'),
             leading: const Icon(Icons.star_outline_rounded, color: Colors.amber, size: 36),
-            onTap: () => launchUrlString('https://github.com/PiElJay/RE-refreezer'),
+            onTap: () => launchUrlString('https://github.com/PiElJay/VYBE-MUSIC'),
           ),
           ListTile(
             isThreeLine: true,

@@ -3,8 +3,8 @@
 Richiede Flutter 3.47.7, Java 17, Android SDK 36, Build Tools 36.0.0 e NDK 28.2.13676358.
 
 ```sh
-git clone --recurse-submodules https://github.com/PiElJay/RE-refreezer.git
-cd RE-refreezer
+git clone --recurse-submodules https://github.com/PiElJay/VYBE-MUSIC.git
+cd VYBE-MUSIC
 sh tool/bootstrap.sh
 flutter test
 flutter build apk --release --target-platform android-arm64 --split-per-abi

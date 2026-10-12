@@ -275,7 +275,7 @@ class ReFreezerLatest {
   static Future<ReFreezerLatest> fetch() async {
     http.Response res = await http.get(
       Uri.parse(
-          'https://api.github.com/repos/PiElJay/RE-refreezer/releases/latest'),
+          'https://api.github.com/repos/PiElJay/VYBE-MUSIC/releases/latest'),
       headers: {'Accept': 'application/vnd.github.v3+json'},
     );
 

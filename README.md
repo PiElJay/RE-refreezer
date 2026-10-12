@@ -1,7 +1,7 @@
 <p align="center"><img src="assets/vybe_music.png" width="180" alt="VYBE MUSIC"></p>
 <h1 align="center">VYBE MUSIC · 1.0.0</h1>
 <p align="center">La tua musica da Deezer e dal telefono, in un’unica libreria.</p>
-<p align="center"><a href="https://github.com/PiElJay/RE-refreezer/releases/latest">Scarica</a> · <a href="https://github.com/PiElJay/RE-refreezer/issues">Proponi un’idea</a> · <a href="https://github.com/PiElJay/RE-refreezer">Lascia una ⭐</a></p>
+<p align="center"><a href="https://github.com/PiElJay/VYBE-MUSIC/releases/latest">Scarica</a> · <a href="https://github.com/PiElJay/VYBE-MUSIC/issues">Proponi un’idea</a> · <a href="https://github.com/PiElJay/VYBE-MUSIC">Lascia una ⭐</a></p>
 
 ## Cosa cambia
 
@@ -27,6 +27,6 @@ Android può impedire l’accesso ai download nella cartella privata di un’alt
 
 Creato da **[PiElJay](https://github.com/PiElJay)**, da una base di [ReFreezer di DJDoubleD](https://github.com/DJDoubleD/refreezer). VYBE MUSIC non è affiliata a Deezer.
 
-Hai un’idea? [Apri una segnalazione](https://github.com/PiElJay/RE-refreezer/issues). Se il progetto ti piace, lascia una stella ⭐
+Hai un’idea? [Apri una segnalazione](https://github.com/PiElJay/VYBE-MUSIC/issues). Se il progetto ti piace, lascia una stella ⭐
 
 [Compilazione](docs/BUILD.md) · [Licenza GPL-3.0](LICENSE)

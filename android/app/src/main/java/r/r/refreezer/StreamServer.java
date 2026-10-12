@@ -49,13 +49,15 @@ public class StreamServer {
     void start() throws IOException {
         try {
             String host = "127.0.0.1";
-            int port = 36958;
+            int port = 0;
             server = new WebServer(host, port);
             server.start(); ready = true;
         } catch (IOException e) {
             ready = false; serverErrorCode = "SERVER_BIND_FAILED"; throw e;
         }
     }
+
+    int getPort() { return server == null ? 0 : server.getListeningPort(); }
 
     void stop() {
         ready = false;

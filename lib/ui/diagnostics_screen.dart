@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../api/deezer.dart';
 import '../api/download.dart';
 import '../service/app_diagnostics.dart';
+import '../service/local_stream_endpoint.dart';
 import '../service/network_monitor.dart';
 
 class DiagnosticsScreen extends StatefulWidget {
@@ -30,7 +31,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       if (!NetworkMonitor.instance.offline) await deezerAPI.authorize();
       try {
         final response = await http
-            .get(Uri.http('127.0.0.1:36958', '/health'))
+            .get(LocalStreamEndpoint.instance.health)
             .timeout(const Duration(seconds: 2));
         final body = jsonDecode(response.body);
         _diagnostics.record(

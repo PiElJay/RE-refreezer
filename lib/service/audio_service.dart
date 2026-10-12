@@ -20,6 +20,7 @@ import 'package:scrobblenaut/scrobblenaut.dart';
 import 'network_monitor.dart';
 import 'audio_queue_loader.dart';
 import 'app_diagnostics.dart';
+import 'local_stream_endpoint.dart';
 import '../api/download.dart';
 import 'queue_selection.dart';
 import '../api/cache.dart';
@@ -628,7 +629,9 @@ class AudioPlayerHandler extends BaseAudioHandler
     if (preferLocal && await f.exists() && await f.length() > 0) {
       //return f.path;
       //Stream server URL
-      return 'http://127.0.0.1:36958/?id=${mediaItem.id}';
+      return LocalStreamEndpoint.instance.track({
+        'id': mediaItem.id,
+      }).toString();
     }
 
     if (NetworkMonitor.instance.offline) return null;
@@ -661,7 +664,7 @@ class AudioPlayerHandler extends BaseAudioHandler
     while (details.length < 3) {
       details.add(null);
     }
-    return Uri.http('127.0.0.1:36958', '/', {
+    return LocalStreamEndpoint.instance.track({
       'q': quality.toString(),
       'id': mediaItem.id,
       'streamTrackId': streamItemId,

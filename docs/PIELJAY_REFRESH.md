@@ -81,8 +81,10 @@ Track conversion tolerates empty artist lists, absent lyrics and mixed numeric/s
 
 Settings > Diagnostica checks the session, native bridge and loopback health endpoint. It copies a bounded report of status codes without credentials, token values, account identifiers, response bodies or query parameters. Initialization errors offer diagnostics/retry instead of rendering a partially initialized app or waiting forever.
 
-Regression coverage: 34 Flutter tests, 5,065 byte-range assertions and nine HTTP checks against the actual StreamServer with the remote provider replaced by a fixture that fails if called. These checks do not validate authenticated Deezer streaming or entitlement on a real device. The account website was inaccessible from the interactive test environment; no account password was stored in source, logs, fixtures or CI.
+Regression coverage: 36 Flutter tests, 5,065 byte-range assertions and eleven HTTP checks against the actual StreamServer with the remote provider replaced by a fixture that fails if called. These checks do not validate authenticated Deezer streaming or entitlement on a real device. The account website was inaccessible from the interactive test environment; no account password was stored in source, logs, fixtures or CI.
 
 GitHub Actions now performs bootstrap, analysis, tests and the ARM64 debug build on pushes to the work branch and pull requests. Its uploaded APK is a debug artifact and does not require signing secrets or account credentials.
 
 The debug variant uses `r.r.refreezer.preview` and the label PiElJay Test. It installs alongside the previously delivered debug variant because the original transient debug signing key was unavailable after the environment reset. Deliverable APKs are signed with a persistent test key stored privately, outside the repository and CI logs. The CI artifact retains the runner's temporary debug signature; it must be re-signed with the persistent test key for updates of the delivered preview app.
+
+The loopback server now binds an OS-assigned port and returns it to Flutter. Playback URLs and the health probe use that endpoint. The native HTTP fixture opens two servers concurrently and verifies distinct ports, avoiding conflicts when the preview and an older installed build are both running.

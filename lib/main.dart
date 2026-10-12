@@ -21,6 +21,7 @@ import 'api/definitions.dart';
 import 'api/download.dart';
 import 'service/audio_service.dart';
 import 'service/app_diagnostics.dart';
+import 'service/local_stream_endpoint.dart';
 import 'ui/diagnostics_screen.dart';
 import 'service/network_monitor.dart';
 import 'service/service_locator.dart';
@@ -302,9 +303,13 @@ class _MainScreenState extends State<MainScreen>
   }
 
   Future<void> _startStreamingServer() async {
-    await DownloadManager.platform.invokeMethod('startServer', {
-      'arl': settings.arl,
-    });
+    final port = await DownloadManager.platform.invokeMethod<int>(
+      'startServer',
+      {'arl': settings.arl},
+    );
+    if (port == null)
+      throw StateError('Local audio server did not return its port');
+    LocalStreamEndpoint.instance.configure(port);
   }
 
   Future<void> _setupServiceLocator() async {

@@ -19,7 +19,9 @@ class _OfflineTracksScreenState extends State<OfflineTracksScreen> {
   late final OfflineMusicLibrary _library = widget.library ?? OfflineMusicLibrary();
   late Future<List<Track>> _tracks;
   void _refresh() {
-    if (mounted) setState(() => _tracks = _library.load());
+    if (mounted) {
+      setState(() { _tracks = _library.load(); });
+    }
   }
 
   @override

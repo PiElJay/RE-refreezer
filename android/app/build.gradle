@@ -50,7 +50,7 @@ android {
     defaultConfig {
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
-        applicationId "r.r.refreezer"
+        applicationId "r.r.refreezer.preview"
         minSdkVersion flutter.minSdkVersion
         targetSdk 35
         versionCode flutterVersionCode.toInteger()
@@ -68,13 +68,11 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
             shrinkResources false
             minifyEnabled false
         }
         debug {
-            applicationIdSuffix '.preview'
-            versionNameSuffix '-debug'
         }
     }
 

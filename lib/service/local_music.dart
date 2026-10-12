@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import '../api/definitions.dart';
@@ -45,7 +46,7 @@ class LocalSong {
   }
 }
 
-class LocalMusicLibrary {
+class LocalMusicLibrary extends ChangeNotifier {
   static const channel = MethodChannel('r.r.refreezer/native');
   static final instance = LocalMusicLibrary();
   final Future<File> Function() fileProvider;
@@ -76,12 +77,13 @@ class LocalMusicLibrary {
         existing.add(song); uris.add(song.uri); identities.add(song.identity); added++;
       }
       await _save(existing);
+      notifyListeners();
     });
     _writes = operation.catchError((Object _) {});
     await operation; return added;
   }
   Future<void> remove(String uri) async {
-    final operation = _writes.then((_) async { final songs = await _read(); songs.removeWhere((e) => e.uri == uri); await _save(songs); });
+    final operation = _writes.then((_) async { final songs = await _read(); songs.removeWhere((e) => e.uri == uri); await _save(songs); notifyListeners(); });
     _writes = operation.catchError((Object _) {}); await operation;
   }
 }

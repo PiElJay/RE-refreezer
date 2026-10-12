@@ -1,51 +1,59 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
-import '../api/download.dart';
 import '../api/definitions.dart';
 import '../service/audio_service.dart';
+import '../service/offline_music.dart';
+import 'local_music_screen.dart';
 import 'tiles.dart';
 import 'menu.dart';
 
 class OfflineTracksScreen extends StatefulWidget {
-  const OfflineTracksScreen({super.key});
+  final OfflineMusicLibrary? library;
+  const OfflineTracksScreen({super.key, this.library});
   @override
   State<OfflineTracksScreen> createState() => _OfflineTracksScreenState();
 }
 
 class _OfflineTracksScreenState extends State<OfflineTracksScreen> {
+  late final OfflineMusicLibrary _library = widget.library ?? OfflineMusicLibrary();
   late Future<List<Track>> _tracks;
-  Future<List<Track>> _load() async {
-    final tracks = await downloadManager.allOfflineTracks();
-    final available = <Track>[];
-    for (final track in tracks) {
-      if (await downloadManager.checkOffline(track: track))
-        available.add(track);
-    }
-    return available;
+  void _refresh() {
+    if (mounted) setState(() => _tracks = _library.load());
   }
 
   @override
   void initState() {
     super.initState();
-    _tracks = _load();
+    _tracks = _library.load();
+    _library.local.addListener(_refresh);
+  }
+
+  @override
+  void dispose() {
+    _library.local.removeListener(_refresh);
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Disponibili offline')),
+    appBar: AppBar(title: const Text('Brani offline'), actions: [
+      IconButton(tooltip: 'Importa dal dispositivo', icon: const Icon(Icons.add_rounded),
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => LocalMusicScreen(library: _library.local)))),
+    ]),
     body: FutureBuilder<List<Track>>(
       future: _tracks,
       builder: (context, snapshot) {
         if (snapshot.hasError)
-          return const Center(child: Text('Impossibile leggere i download'));
+          return const Center(child: Text('Impossibile leggere i brani offline'));
         if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
         final tracks = snapshot.data!;
         if (tracks.isEmpty)
           return const Center(
             child: Text(
-              'Scarica un brano per ascoltarlo anche in modalità aereo',
+              'Importa la musica dal dispositivo o scarica un brano per ascoltarlo offline',
             ),
           );
         return ListView.builder(
@@ -58,7 +66,7 @@ class _OfflineTracksScreenState extends State<OfflineTracksScreen> {
               onTap: () => GetIt.I<AudioPlayerHandler>().playFromTrackList(
                 tracks,
                 track.id!,
-                QueueSource(source: 'offline', text: 'Download'),
+                QueueSource(source: 'offline', text: 'Brani offline'),
                 selectedIndex: index,
               ),
               onHold: () =>

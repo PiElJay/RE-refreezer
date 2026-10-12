@@ -1,4 +1,7 @@
 import 'local_music_screen.dart';
+import 'offline_tracks.dart';
+import '../service/local_music.dart';
+import '../service/offline_music.dart';
 import '../service/network_monitor.dart';
 import 'package:draggable_scrollbar/draggable_scrollbar.dart';
 import 'package:flutter/foundation.dart';
@@ -101,6 +104,12 @@ class LibraryScreen extends StatelessWidget {
             },
           ),
           const FreezerDivider(),
+          ListTile(
+            title: const Text('Brani offline'),
+            subtitle: const Text('Download e musica importata dal dispositivo'),
+            leading: const LeadingIcon(Icons.offline_pin_rounded, color: Color(0xff9b6dff)),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OfflineTracksScreen())),
+          ),
           ListTile(
             title: Text('Tracks'.i18n),
             leading: const LeadingIcon(
@@ -460,7 +469,9 @@ class _LibraryTracksState extends State<LibraryTracks> {
   }
 
   Future _loadAllOffline() async {
-    List<Track> tracks = await downloadManager.allOfflineTracks();
+    List<Track> tracks;
+    try { tracks = await OfflineMusicLibrary().load(); }
+    catch (_) { tracks = []; }
     if (mounted) {
       setState(() {
         allTracks = tracks;
@@ -486,6 +497,7 @@ class _LibraryTracksState extends State<LibraryTracks> {
     _load();
     //Load all offline tracks
     _loadAllOffline();
+    LocalMusicLibrary.instance.addListener(_loadAllOffline);
 
     //Load sorting
     int? index = Sorting.index(SortSourceTypes.TRACKS);
@@ -496,6 +508,13 @@ class _LibraryTracksState extends State<LibraryTracks> {
     if (_sort.type != SortType.DEFAULT || _sort.reverse) _loadFull();
 
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    LocalMusicLibrary.instance.removeListener(_loadAllOffline);
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override

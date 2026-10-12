@@ -4,6 +4,8 @@ import 'package:get_it/get_it.dart';
 import '../api/definitions.dart';
 import '../service/audio_service.dart';
 import '../service/local_music.dart';
+import '../service/offline_music.dart';
+import 'offline_tracks.dart';
 
 class LocalMusicScreen extends StatefulWidget {
   final LocalMusicLibrary? library;
@@ -53,7 +55,7 @@ class _LocalMusicScreenState extends State<LocalMusicScreen> {
     try {
       final count = await _library.importSongs(_found.where((e) => _selected.contains(e.uri)).toList());
       if (!mounted) return;
-      setState(() { _preview = false; _message = '$count brani aggiunti. Pronti anche in modalità aereo.'; });
+      setState(() { _preview = false; _message = '$count brani aggiunti a Brani offline. Pronti anche in modalità aereo.'; });
       await _load();
     } catch (_) { if (mounted) setState(() => _message = 'Importazione non completata. I file originali restano sul telefono. Riprova.'); }
     finally { if (mounted) setState(() => _busy = false); }
@@ -92,7 +94,12 @@ class _LocalMusicScreenState extends State<LocalMusicScreen> {
             ]),
             CheckboxListTile(contentPadding: EdgeInsets.zero, title: const Text('Seleziona tutti'), value: _selected.length == _found.length,
               onChanged: _busy ? null : (value) => setState(() { _selected.clear(); if (value == true) _selected.addAll(_found.map((e) => e.uri)); })),
-          ] else Text('${_songs.length} brani nella libreria locale', style: Theme.of(context).textTheme.titleMedium),
+          ] else ...[
+            Text('${_songs.length} brani importati', style: Theme.of(context).textTheme.titleMedium),
+            TextButton.icon(onPressed: _busy ? null : () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => OfflineTracksScreen(library: OfflineMusicLibrary(local: _library)))),
+              icon: const Icon(Icons.offline_pin_rounded), label: const Text('Apri Brani offline')),
+          ],
         ]))),
       SliverList.builder(itemCount: _preview ? _found.length : _songs.length, itemBuilder: (context, index) {
         final song = (_preview ? _found : _songs)[index];

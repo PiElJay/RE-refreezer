@@ -116,7 +116,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LocalMusicScreen()))),
 
             ListTile(leading: const Icon(Icons.offline_pin_rounded),
-              title: const Text('Brani disponibili offline'),
+              title: const Text('Brani offline'),
               subtitle: const Text('La tua musica, anche senza connessione'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OfflineTracksScreen()))),

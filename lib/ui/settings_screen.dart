@@ -1791,17 +1791,12 @@ class CreditsScreen extends StatefulWidget {
 }
 
 class _CreditsScreenState extends State<CreditsScreen> {
-  String _version = '';
-
-  static final List<List<String>> translators = [
-    ['Andrea', 'Resident Polyglot, Italian and just about everything else <3'],
-    ['ovosimpatico', 'Portuguese & Spanish'],
-    ['PanChi', 'German'],
-  ];
+  String _version = 'v1.0.0';
 
   @override
   void initState() {
     PackageInfo.fromPlatform().then((info) {
+      if (!mounted) return;
       setState(() {
         _version = 'v${info.version}';
       });
@@ -1812,7 +1807,7 @@ class _CreditsScreenState extends State<CreditsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: FreezerAppBar('About'.i18n),
+      appBar: const FreezerAppBar('Info'),
       body: ListView(
         children: [
           const FreezerTitle(),
@@ -1822,57 +1817,27 @@ class _CreditsScreenState extends State<CreditsScreen> {
             style: const TextStyle(fontStyle: FontStyle.italic),
           ),
           const FreezerDivider(),
+          ListTile(
+            title: const Text('PiElJay', style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('github.com/PiElJay'),
+            leading: const Icon(FontAwesome5.github),
+            onTap: () => launchUrlString('https://github.com/PiElJay'),
+          ),
           const ListTile(
-            title: Text(
-              'PiElJay',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text('Da un’idea di DJDoubleD'),
+            subtitle: Text('Da una base di ReFreezer di DJDoubleD'),
           ),
           const FreezerDivider(),
-          /*ListTile(
-            title: Text('Telegram Channel'.i18n),
-            subtitle: Text('To get latest releases'.i18n),
-            leading: const Icon(FontAwesome5.telegram, color: Color(0xFF27A2DF), size: 36.0),
-            onTap: () {
-              launchUrlString('https://t.me/joinchat/Se4zLEBvjS1NCiY9');
-            },
+          ListTile(
+            title: const Text('GitHub · contribuisci con le tue idee'),
+            subtitle: const Text('Proponi una funzione o segnala un problema'),
+            leading: const Icon(Icons.code_rounded, color: Colors.green, size: 36),
+            onTap: () => launchUrlString('https://github.com/PiElJay/RE-refreezer/issues'),
           ),
           ListTile(
-            title: Text('Telegram Group'.i18n),
-            subtitle: Text('Official chat'.i18n),
-            leading: const Icon(FontAwesome5.telegram, color: Colors.cyan, size: 36.0),
-            onTap: () {
-              launchUrlString('https://t.me/freezerandroid');
-            },
-          ),
-          ListTile(
-            title: Text('Discord'.i18n),
-            subtitle: Text('Official Discord server'.i18n),
-            leading: const Icon(FontAwesome5.discord, color: Color(0xff7289da), size: 36.0),
-            onTap: () {
-              launchUrlString('https://discord.gg/qwJpa3r4dQ');
-            },
-          ),*/
-          ListTile(
-            title: Text('Repository'.i18n),
-            subtitle: Text('Source code, report issues there.'.i18n),
-            leading: const Icon(Icons.code, color: Colors.green, size: 36.0),
-            onTap: () {
-              launchUrlString('https://github.com/PiElJay/RE-refreezer');
-            },
-          ),
-          ListTile(
-            title: Text('Crowdin'.i18n),
-            subtitle: Text('Help translating this app on Crowdin!'.i18n),
-            leading: const Icon(
-              ReFreezerIcons.crowdin,
-              color: Color(0xffbdc1c6),
-              size: 36.0,
-            ),
-            onTap: () {
-              launchUrlString('https://crowdin.com/project/refreezer');
-            },
+            title: const Text('Lascia una stella su GitHub'),
+            subtitle: const Text('Ti piace VYBE MUSIC? Sostieni il progetto con una stella'),
+            leading: const Icon(Icons.star_outline_rounded, color: Colors.amber, size: 36),
+            onTap: () => launchUrlString('https://github.com/PiElJay/RE-refreezer'),
           ),
           ListTile(
             isThreeLine: true,
@@ -1909,25 +1874,6 @@ class _CreditsScreenState extends State<CreditsScreen> {
               );
               // launchUrlString('https://paypal.me/exttex');
             },
-          ),
-          const FreezerDivider(),
-          ...List.generate(
-            translators.length,
-            (i) => ListTile(
-              title: Text(translators[i][0]),
-              subtitle: Text(translators[i][1]),
-            ),
-          ),
-          const Padding(padding: EdgeInsets.all(8.0)),
-          const FreezerDivider(),
-          const FreezerDivider(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
-            child: Text(
-              'Huge thanks to all the contributors! <3'.i18n,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16.0),
-            ),
           ),
           const FreezerDivider(),
         ],

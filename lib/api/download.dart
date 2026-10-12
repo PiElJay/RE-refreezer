@@ -579,6 +579,7 @@ class DownloadManager {
   Future<bool> checkOffline(
       {Album? album, Track? track, Playlist? playlist}) async {
     if (track != null) {
+      if (track.id?.startsWith('local:') == true) return track.localUri != null;
       //Track
       List res = await db!.query('Tracks',
           where: 'id == ? AND offline == 1', whereArgs: [track.id]);

@@ -1,3 +1,4 @@
+import 'local_music_screen.dart';
 import '../service/network_monitor.dart';
 import 'package:draggable_scrollbar/draggable_scrollbar.dart';
 import 'package:flutter/foundation.dart';
@@ -65,6 +66,11 @@ class LibraryScreen extends StatelessWidget {
       appBar: const LibraryAppBar(),
       body: ListView(
         children: <Widget>[
+            ListTile(leading: const Icon(Icons.library_music_rounded),
+              title: const Text('Musica sul dispositivo'), subtitle: const Text('Importa i brani già presenti sul telefono'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LocalMusicScreen()))),
+
           Container(height: 4.0),
           ListTile(
             title: const Text('Download'),

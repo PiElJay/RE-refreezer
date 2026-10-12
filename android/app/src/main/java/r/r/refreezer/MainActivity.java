@@ -52,6 +52,7 @@ public class MainActivity extends AudioServiceActivity {
     Messenger activityMessenger;
     SQLiteDatabase db;
     StreamServer streamServer;
+    LocalMusicBridge localMusic;
 
     //Data if started from intent
     String intentPreload;
@@ -72,8 +73,12 @@ public class MainActivity extends AudioServiceActivity {
         changeIconPlugin.initWith(flutterEngine.getDartExecutor().getBinaryMessenger());
         changeIconPlugin.tryFixLauncherIconIfNeeded();
 
+        localMusic = new LocalMusicBridge(this);
         //Flutter method channel
         new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL).setMethodCallHandler(((call, result) -> {
+
+            if (call.method.equals("scanLocalMusic")) { localMusic.scan(result); return; }
+            if (call.method.equals("pickMusicFolder")) { localMusic.pickFolder(result); return; }
 
             //Add downloads to DB, then refresh service
             if (call.method.equals("addDownloads")) {
@@ -313,12 +318,13 @@ public class MainActivity extends AudioServiceActivity {
     @Override
     protected void onStop() {
         super.onStop();
-        db.close();
+        if (db != null && db.isOpen()) db.close();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (localMusic != null) localMusic.close();
         //Stop server
         if (streamServer != null)
             streamServer.stop();
@@ -328,6 +334,17 @@ public class MainActivity extends AudioServiceActivity {
             unbindService(connection);
             serviceBound = false;
         }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (localMusic != null) localMusic.permissionResult(requestCode, grantResults);
+    }
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (localMusic != null) localMusic.activityResult(requestCode, resultCode, data);
     }
 
     //Connection to download service

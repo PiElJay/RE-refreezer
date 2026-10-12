@@ -1,3 +1,4 @@
+import 'local_music_screen.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -109,6 +110,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         ),
         body: ListView(
           children: [
+            ListTile(leading: const Icon(Icons.library_music_rounded),
+              title: const Text('Musica sul dispositivo'), subtitle: const Text('Importa i brani già presenti sul telefono'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LocalMusicScreen()))),
+
             ListTile(leading: const Icon(Icons.offline_pin_rounded),
               title: const Text('Brani disponibili offline'),
               subtitle: const Text('La tua musica, anche senza connessione'),

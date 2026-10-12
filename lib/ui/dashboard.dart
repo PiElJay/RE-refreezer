@@ -10,6 +10,7 @@ import 'cached_image.dart';
 import 'downloads_screen.dart';
 import 'home_screen.dart';
 import 'library.dart';
+import 'local_music_screen.dart';
 import 'player_screen.dart';
 import 'settings_screen.dart';
 
@@ -78,6 +79,10 @@ class _MusicDashboardState extends State<MusicDashboard> {
                   ),
                 ),
               ),
+              SliverPadding(padding: const EdgeInsets.symmetric(horizontal: 24), sliver: SliverToBoxAdapter(child: Card(
+                child: ListTile(leading: const Icon(Icons.library_music_rounded, color: Color(0xff61d8ff)),
+                  title: const Text('La musica che hai già'), subtitle: const Text('Importa i brani dal telefono'), trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LocalMusicScreen())))))),
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 sliver: SliverToBoxAdapter(

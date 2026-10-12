@@ -18,6 +18,7 @@ import 'package:rxdart/rxdart.dart';
 import 'package:scrobblenaut/scrobblenaut.dart';
 
 import 'network_monitor.dart';
+import 'local_music.dart';
 import 'audio_queue_loader.dart';
 import 'app_diagnostics.dart';
 import 'local_stream_endpoint.dart';
@@ -276,7 +277,7 @@ class AudioPlayerHandler extends BaseAudioHandler
         cache.save();
 
         //Log to Deezer
-        if (settings.logListen) {
+        if (settings.logListen && !mediaItem.value!.id.startsWith('local:')) {
           deezerAPI.logListen(mediaItem.value!.id);
         }
       }
@@ -623,6 +624,7 @@ class AudioPlayerHandler extends BaseAudioHandler
     bool preferLocal = true,
     int? streamQuality,
   }) async {
+    if (mediaItem.id.startsWith('local:')) return LocalSong.sourceUri(mediaItem.extras?['localUri']);
     //Check if offline
     String offlinePath = await _getOfflineDirectory();
     File f = File(p.join(offlinePath, mediaItem.id));
@@ -895,6 +897,11 @@ class AudioPlayerHandler extends BaseAudioHandler
   }
 
   Future<bool> _showPlaybackFailure() async {
+    if (mediaItem.value?.id.startsWith('local:') == true) {
+      AppDiagnostics.instance.record('localAudio', 'FILE_UNAVAILABLE');
+      await Fluttertoast.showToast(msg: 'File locale non disponibile. Verifica accesso audio e posizione del file.');
+      return false;
+    }
     String code = 'SOURCE_UNAVAILABLE';
     bool fatal = false;
     try {
@@ -938,7 +945,7 @@ class AudioPlayerHandler extends BaseAudioHandler
       final failed = _player.currentIndex;
       if (failed != null && failed < queue.value.length) {
         final item = queue.value[failed];
-        if (!NetworkMonitor.instance.offline && _retriedIds.add(item.id)) {
+        if (!item.id.startsWith('local:') && !NetworkMonitor.instance.offline && _retriedIds.add(item.id)) {
           try {
             final fresh = await deezerAPI
                 .track(item.id)

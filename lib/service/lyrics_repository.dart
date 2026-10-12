@@ -10,6 +10,7 @@ import 'network_monitor.dart';
 
 class LyricsRepository {
   static Future<Lyrics> load(String trackId) async {
+    if (trackId.startsWith('local:')) throw const FormatException('Local file has no Deezer track ID');
     final directory = Directory(
       p.join((await getApplicationDocumentsDirectory()).path, 'lyrics'),
     );

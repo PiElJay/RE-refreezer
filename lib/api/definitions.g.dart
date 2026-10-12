@@ -9,6 +9,7 @@ part of 'definitions.dart';
 Track _$TrackFromJson(Map<String, dynamic> json) => Track(
       id: json['id'] as String?,
       title: json['title'] as String?,
+      localUri: json['localUri'] as String?,
       duration: json['duration'] == null
           ? null
           : Duration(microseconds: (json['duration'] as num).toInt()),
@@ -41,6 +42,7 @@ Track _$TrackFromJson(Map<String, dynamic> json) => Track(
 Map<String, dynamic> _$TrackToJson(Track instance) => <String, dynamic>{
       'id': instance.id,
       'title': instance.title,
+      'localUri': instance.localUri,
       'album': instance.album,
       'artists': instance.artists,
       'duration': instance.duration?.inMicroseconds,

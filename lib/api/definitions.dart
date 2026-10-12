@@ -17,6 +17,7 @@ part 'definitions.g.dart';
 class Track {
   String? id;
   String? title;
+  String? localUri;
   Album? album;
   List<Artist>? artists;
   Duration? duration;
@@ -37,6 +38,7 @@ class Track {
   Track(
       {this.id,
       this.title,
+      this.localUri,
       this.duration,
       this.album,
       this.playbackDetails,
@@ -69,6 +71,7 @@ class Track {
           duration: duration,
           id: id ?? '',
           extras: {
+            'localUri': localUri,
             'playbackDetails': jsonEncode(playbackDetails),
             'thumb': albumArt?.thumb,
             'lyrics': jsonEncode(lyrics?.toJson()),
@@ -109,8 +112,9 @@ class Track {
         artists: artists,
         album: album,
         id: mi.id,
+        localUri: mi.extras?['localUri'] as String?,
         albumArt: ImageDetails(
-            fullUrl: mi.artUri.toString(), thumbUrl: mi.extras?['thumb']),
+            fullUrl: mi.artUri?.toString(), thumbUrl: mi.extras?['thumb']),
         duration: mi.duration,
         playbackDetails: playbackDetails,
         lyrics: _mediaItemLyrics(mi),

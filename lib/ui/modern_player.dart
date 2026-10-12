@@ -30,21 +30,21 @@ class ModernPlayer extends StatelessWidget {
               icon: const Icon(Icons.keyboard_arrow_down_rounded),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            title: const Column(
+            title: Column(
               children: [
                 Text(
                   'IN RIPRODUZIONE',
                   style: TextStyle(fontSize: 11, letterSpacing: 2),
                 ),
                 Text(
-                  'Deezer',
+                  item?.extras?['localUri'] == null ? 'Deezer' : 'Sul dispositivo',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                 ),
               ],
             ),
             centerTitle: true,
             actions: [
-              if (item != null)
+              if (item != null && item.extras?['localUri'] == null)
                 IconButton(
                   tooltip: 'Opzioni brano',
                   icon: const Icon(Icons.more_horiz_rounded),
@@ -217,7 +217,7 @@ class ModernPlayer extends StatelessWidget {
                                 spacing: 10,
                                 runSpacing: 8,
                                 children: [
-                                  OutlinedButton.icon(
+                                  if (item.extras?['localUri'] == null) OutlinedButton.icon(
                                     onPressed: () => Navigator.of(context).push(
                                       MaterialPageRoute(
                                         builder: (_) =>
@@ -236,7 +236,7 @@ class ModernPlayer extends StatelessWidget {
                                     icon: const Icon(Icons.queue_music_rounded),
                                     label: const Text('Coda'),
                                   ),
-                                  OutlinedButton.icon(
+                                  if (item.extras?['localUri'] == null) OutlinedButton.icon(
                                     onPressed: () async {
                                       final track = Track.fromMediaItem(item);
                                       if (!await downloadManager.checkOffline(

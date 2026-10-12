@@ -16,6 +16,8 @@ import '../api/deezer.dart';
 import '../api/definitions.dart';
 import '../utils/navigator_keys.dart';
 import '../settings.dart';
+import '../ui/quality_notice.dart';
+import '../service/network_monitor.dart';
 import '../translations.i18n.dart';
 import '../utils/file_utils.dart';
 
@@ -28,6 +30,16 @@ class DownloadManager {
       EventChannel('r.r.refreezer/downloads');
 
   bool running = false;
+  bool _resumeOnReconnect = false;
+  bool _networkListening = false;
+
+  void _connectionChanged() {
+    if (NetworkMonitor.instance.offline && running) {
+      stop(becauseNetwork: true).catchError((Object _) {});
+    } else if (!NetworkMonitor.instance.offline && _resumeOnReconnect) {
+      start().catchError((Object _) {});
+    }
+  }
   int queueSize = 0;
 
   StreamController serviceEvents = StreamController.broadcast();
@@ -36,13 +48,19 @@ class DownloadManager {
 
   //Start/Resume downloads
   Future start() async {
+    if (NetworkMonitor.instance.offline) {
+      _resumeOnReconnect = true;
+      return;
+    }
+    _resumeOnReconnect = false;
     //Returns whether service is bound or not, the delay is really shitty/hacky way, until i find a real solution
     await updateServiceSettings();
     await platform.invokeMethod('start');
   }
 
   //Stop/Pause downloads
-  Future stop() async {
+  Future stop({bool becauseNetwork = false}) async {
+    _resumeOnReconnect = becauseNetwork;
     await platform.invokeMethod('stop');
   }
 
@@ -85,6 +103,7 @@ class DownloadManager {
       if (e['action'] == 'onStateChange') {
         running = e['running'];
         queueSize = e['queueSize'];
+        if (running && NetworkMonitor.instance.offline) _connectionChanged();
       }
 
       //Forward
@@ -92,6 +111,11 @@ class DownloadManager {
     });
 
     await platform.invokeMethod('loadDownloads');
+    if (!_networkListening) {
+      NetworkMonitor.instance.addListener(_connectionChanged);
+      _networkListening = true;
+    }
+    _connectionChanged();
   }
 
   //Get all downloads from db
@@ -160,6 +184,9 @@ class DownloadManager {
             ],
           );
         });
+    final context = mainNavigatorKey.currentContext;
+    if (quality == null || context == null || !context.mounted) return null;
+    if (!await confirmOnlineQuality(context, quality!)) return null;
     return quality;
   }
 
@@ -552,6 +579,7 @@ class DownloadManager {
   Future<bool> checkOffline(
       {Album? album, Track? track, Playlist? playlist}) async {
     if (track != null) {
+      if (track.id?.startsWith('local:') == true) return track.localUri != null;
       //Track
       List res = await db!.query('Tracks',
           where: 'id == ? AND offline == 1', whereArgs: [track.id]);

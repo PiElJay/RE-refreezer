@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'log_redaction.dart';
 import 'dart:collection';
 import 'dart:developer';
 import 'dart:io';
@@ -69,5 +70,5 @@ String _formatLogMessage(LogRecord record) {
     buffer.write('Stack Trace: ${record.stackTrace}\n');
   }
 
-  return buffer.toString();
+  return redactLog(buffer.toString());
 }

@@ -5,6 +5,7 @@ import 'package:get_it/get_it.dart';
 import '../api/deezer.dart';
 import '../api/definitions.dart';
 import '../service/audio_service.dart';
+import '../service/network_monitor.dart';
 import '../settings.dart';
 import '../translations.i18n.dart';
 import '../ui/elements.dart';
@@ -78,23 +79,14 @@ class FreezerTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 24, 0, 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Image.asset('assets/icon.png', width: 64, height: 64),
-              const Text(
-                'ReFreezer',
-                style: TextStyle(fontSize: 56, fontWeight: FontWeight.w900),
-              )
-            ],
-          )
-        ],
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: Column(children: [
+        ClipRRect(borderRadius: BorderRadius.circular(24),
+          child: Image.asset('assets/vybe_music.png', width: 200, height: 200, semanticLabel: 'VYBE MUSIC')),
+        const SizedBox(height: 12),
+        const Text('VYBE MUSIC', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900)),
+        const Text('PiElJay · Musica da Deezer', style: TextStyle(fontSize: 14)),
+      ]),
     );
   }
 }
@@ -112,6 +104,12 @@ class _HomePageScreenState extends State<HomePageScreen> {
   HomePage? _homePage;
   bool _cancel = false;
   bool _error = false;
+  void _networkChanged() {
+    if (mounted && !NetworkMonitor.instance.offline) {
+      setState(() => _error = false);
+      _load();
+    }
+  }
 
   void _loadChannel() async {
     HomePage? hp;
@@ -135,22 +133,32 @@ class _HomePageScreenState extends State<HomePageScreen> {
     //Load local
     try {
       HomePage hp = await HomePage().load();
+      if (!mounted) return;
       setState(() => _homePage = hp);
     } catch (e) {
+      if (mounted && _homePage == null) setState(() => _error = true);
       if (kDebugMode) {
         print(e);
       }
     }
+    if (settings.offlineMode) {
+      if (mounted && _homePage == null) setState(() => _error = true);
+      return;
+    }
     //On background load from API
     try {
-      if (settings.offlineMode) await deezerAPI.authorize();
       HomePage hp = await deezerAPI.homePage();
       if (_cancel) return;
-      if (hp.sections.isEmpty) return;
+      if (hp.sections.isEmpty) {
+        if (mounted && _homePage == null) setState(() => _error = true);
+        return;
+      }
+      if (!mounted) return;
       setState(() => _homePage = hp);
       //Save to cache
       await _homePage?.save();
     } catch (e) {
+      if (mounted && _homePage == null) setState(() => _error = true);
       if (kDebugMode) {
         print(e);
       }
@@ -178,17 +186,23 @@ class _HomePageScreenState extends State<HomePageScreen> {
   @override
   void initState() {
     super.initState();
+    NetworkMonitor.instance.addListener(_networkChanged);
     _load();
   }
 
   @override
   void dispose() {
     _cancel = true;
+    NetworkMonitor.instance.removeListener(_networkChanged);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_error && _homePage == null)
+      return const Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('I suggerimenti Deezer tornano quando sei connesso.'));
     if (_homePage == null) {
       return const Center(
           child: Padding(

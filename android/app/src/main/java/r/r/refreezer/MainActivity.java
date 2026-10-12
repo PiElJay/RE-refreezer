@@ -1,5 +1,7 @@
 package r.r.refreezer;
 
+import java.io.IOException;
+
 import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -25,16 +27,9 @@ import androidx.annotation.Nullable;
 import com.ryanheise.audioservice.AudioServiceActivity;
 
 import java.lang.ref.WeakReference;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.plugin.common.EventChannel;
@@ -50,6 +45,7 @@ public class MainActivity extends AudioServiceActivity {
     Messenger activityMessenger;
     SQLiteDatabase db;
     StreamServer streamServer;
+    LocalMusicBridge localMusic;
 
     //Data if started from intent
     String intentPreload;
@@ -70,8 +66,12 @@ public class MainActivity extends AudioServiceActivity {
         changeIconPlugin.initWith(flutterEngine.getDartExecutor().getBinaryMessenger());
         changeIconPlugin.tryFixLauncherIconIfNeeded();
 
+        localMusic = new LocalMusicBridge(this);
         //Flutter method channel
         new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL).setMethodCallHandler(((call, result) -> {
+
+            if (call.method.equals("scanLocalMusic")) { localMusic.scan(result); return; }
+            if (call.method.equals("pickMusicFolder")) { localMusic.pickFolder(result); return; }
 
             //Add downloads to DB, then refresh service
             if (call.method.equals("addDownloads")) {
@@ -191,14 +191,41 @@ public class MainActivity extends AudioServiceActivity {
             }
             //Start streaming server
             if (call.method.equals("startServer")) {
+                if (streamServer != null && !streamServer.matchesSession(call.argument("arl"))) {
+                    streamServer.stop(); streamServer = null;
+                }
                 if (streamServer == null) {
                     //Get offline path
                     String offlinePath = getExternalFilesDir("offline").getAbsolutePath();
                     //Start server
                     streamServer = new StreamServer(call.argument("arl"), offlinePath);
-                    streamServer.start();
+                    try { streamServer.start(); }
+                    catch (IOException e) {
+                        streamServer = null;
+                        result.error("SERVER_BIND_FAILED", "Local audio server could not start", null); return;
+                    }
                 }
-                result.success(null);
+                streamServer.adoptSession(call.argument("session"));
+                result.success(streamServer.getPort());
+                return;
+            }
+            if (call.method.equals("setStreamingSession")) {
+                result.success(streamServer != null && streamServer.adoptSession(call.argument("session"))); return;
+            }
+            if (call.method.equals("refreshStreamSession")) {
+                final StreamServer currentServer = streamServer;
+                if (currentServer == null) { result.error("SERVER_NOT_STARTED", "Audio server unavailable", null); return; }
+                new Thread(() -> {
+                    HashMap<String, Object> state = currentServer.refreshSession();
+                    new Handler(Looper.getMainLooper()).post(() -> result.success(state));
+                }).start(); return;
+            }
+            if (call.method.equals("getPlaybackDiagnostics")) {
+                if (streamServer != null) result.success(streamServer.diagnostics());
+                else {
+                    HashMap<String, Object> data = new HashMap<>(); data.put("errorCode", "SERVER_NOT_STARTED");
+                    data.put("ready", false); data.put("fatal", true); result.success(data);
+                }
                 return;
             }
             //Get quality info from stream
@@ -267,26 +294,7 @@ public class MainActivity extends AudioServiceActivity {
         DownloadsDatabase dbHelper = new DownloadsDatabase(getApplicationContext());
         db = dbHelper.getWritableDatabase();
 
-        //Trust all SSL Certs - Credits to Kilowatt36
-        TrustManager[] trustAllCerts = new TrustManager[]{
-                new X509TrustManager() {
-                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                        return null;
-                    }
-                    public void checkClientTrusted(X509Certificate[] certs, String authType) {
-                    }
-                    public void checkServerTrusted(X509Certificate[] certs, String authType) {
-                    }
-                }
-        };
-        SSLContext sc;
-        try {
-            sc = SSLContext.getInstance("SSL");
-            sc.init(null, trustAllCerts, new java.security.SecureRandom());
-            HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
-        } catch (NoSuchAlgorithmException | KeyManagementException e) {
-            Log.e(this.getLocalClassName(), e.getMessage());
-        }
+
     }
 
     @Override
@@ -299,12 +307,13 @@ public class MainActivity extends AudioServiceActivity {
     @Override
     protected void onStop() {
         super.onStop();
-        db.close();
+        if (db != null && db.isOpen()) db.close();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (localMusic != null) localMusic.close();
         //Stop server
         if (streamServer != null)
             streamServer.stop();
@@ -314,6 +323,17 @@ public class MainActivity extends AudioServiceActivity {
             unbindService(connection);
             serviceBound = false;
         }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (localMusic != null) localMusic.permissionResult(requestCode, grantResults);
+    }
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (localMusic != null) localMusic.activityResult(requestCode, resultCode, data);
     }
 
     //Connection to download service

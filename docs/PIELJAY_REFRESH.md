@@ -1,0 +1,90 @@
+# PiElJay player refresh
+
+This fork keeps Deezer as its music provider and preserves upstream licensing.
+
+## Behavior changes
+
+- Clicked track occurrences are resolved again after unavailable audio sources are removed. Duplicate Deezer IDs remain separate queue entries.
+- The public queue uses source order. Shuffle order is a permutation over that order; clicks, removal and current-item reporting use source indices.
+- Playlist pagination uses a provider cursor independent of filtered playable sources and retains duplicate occurrences.
+- Queue replacements run in order and ignore stale selections. A failed queue extension cannot replace a newer selection.
+- Playback checkpoints are serialized and atomically replaced every 15 seconds while playing, on queue selection and on stop. Older playback files keep the same format.
+- Finishing playback preserves the last item and position instead of seeking to the first song.
+- Playback failures allow one online metadata refresh, then scan the remaining playback order. Offline recovery only selects downloaded files and never wraps indefinitely.
+- A live connection monitor handles airplane mode, captive/unusable connections and app resume. Downloads paused by a connection loss resume automatically; manually paused downloads remain paused.
+- The local audio server checks completed local files on every request, including queues created before downloads completed.
+- Download commands share the same private offline storage. The Download hub links downloaded tracks and transfer states.
+- Query history persists separately from opened search-result history, with deduplication, deletion and a 30-query limit.
+- Deezer lyrics support a bounded pipe-to-legacy fallback, persistent positive cache and following the current song without closing the lyric screen.
+- New adaptive dashboard and player, consistent component styling and PiElJay attribution.
+- Credential-bearing diagnostic values are redacted before writing logs.
+
+## Build
+
+Clone with submodules. Use Flutter 3.47.7 and Java 17, Android SDK 36 (target 35, minimum Android 7.0) and NDK 28.2.13676358. Gradle 8.14.4, AGP 8.11.1 and Kotlin 2.2.20 are pinned.
+
+Copy `lib/.env.example` to `lib/.env`. Blank values permit compilation and ARL sign-in; email/password Deezer sign-in and Last.fm require your own corresponding application credentials.
+
+```sh
+./tool/bootstrap.sh
+flutter analyze --no-pub --no-fatal-infos
+flutter test --no-pub
+flutter build apk --debug --target-platform android-arm64 --split-per-abi
+```
+
+Debug builds use the existing `.debug` application ID suffix and install separately from a release build. They do not share the release app's downloads or session. A release update requires the existing signing key; do not uninstall an existing app to resolve a signature mismatch without backing up its data.
+
+The navigator dependency has a small local compatibility copy in `packages/custom_navigator`; it inherits new Flutter observer defaults and retains the upstream MIT license. The bootstrap script generates Dart 3.0-compatible serializers for the inherited Last.fm submodule without modifying its tracked source.
+
+## Automated validation
+
+Android ARM64 debug APK compilation passed, including the Java stream server and JNI/CMake integration. APK signing verification passed; minimum API is 24 and target API is 35. This is a development build, not a signed release update.
+
+The regression suite covers 896 filtered-queue selections, duplicate identities, unavailable selections, bounded recovery in shuffle order, legacy cache compatibility, concurrent query persistence and log redaction. Widget checks render dashboard, player and search at 320×720, 844×390 and 1024×768 with 150% text scaling and verify search disposal. Static analysis has no compilation errors or warnings; informational lint/deprecation findings remain in inherited components.
+
+## Device acceptance checks
+
+These checks require an authenticated Deezer session and have to be performed on an Android device.
+
+1. In album, sorted playlist, search, history and offline lists, select a middle item with unavailable predecessors. Confirm displayed and played IDs agree.
+2. Add the same track twice to a playlist; select each occurrence. Test shuffle, removal and reordering.
+3. Tap three different tracks quickly, then press Next. Only the latest selection should win.
+4. Play a mixed local/online queue, enable airplane mode during playback and advance. Downloaded tracks remain playable; missing tracks fail cleanly.
+5. Download a track after constructing its queue, then disconnect and play it.
+6. Test airplane mode with Wi-Fi still enabled, Wi-Fi without Internet, network return and a manual download pause.
+7. Finish the final playable track. The app must not seek to the first track.
+8. Load lyrics, disconnect, reopen them and seek. Change songs with lyrics open; old requests must not overwrite the current song.
+9. Repeat and delete searches; restart and confirm query persistence.
+10. Check 320-pixel phone width, landscape, tablet width and large text. Check the mini-player, queue and download hub.
+
+Deezer catalog availability and lyric coverage depend on the account and provider. Automated invariant tests do not substitute for the authenticated device checks above.
+
+### Browser login repair
+
+Browser login now reads the Deezer `arl` session cookie through the native WebView cookie manager after sign-in. It no longer forces `/open_app` or waits for `deezer.page.link` / `dzr.page.link` intents. A periodic check also handles login without a page reload. Reads stop on disposal and completion; HTTP errors on the main page offer a way back. Credentials and cookies are never printed. No Deezer app credentials are needed for this browser flow. A real authenticated device sign-in still requires manual verification.
+
+### Login follow-up (0.8.1)
+
+The provider's localized login links now redirect to `https://account.deezer.com/it/login/`. The browser opens that account endpoint directly and checks ARL cookies on `www.deezer.com`, `account.deezer.com` and `deezer.com`; it does not assume the cookie is shared across hosts. Main-frame HTTP failures show the host and path without query parameters, with retry/back actions.
+
+The email/password method is unavailable in a build lacking Deezer application credentials: the UI explains the configuration issue before collecting a password and the API rejects it before making any HTTP requests. It does not report a password error in that case.
+
+Five additional regression tests cover host-only cookies, failed cookie scopes, empty sessions, stopping at the first session and the unconfigured email method. Authenticated browser sign-in must still be checked on a device; public URL retrieval from the build environment is blocked by its network gateway.
+
+### Playback and diagnostics repair (0.8.2)
+
+Queue loads pass the selected initial index to just_audio in one operation. The old clear/addAll/seek sequence could preload an unavailable first track and abort before reaching the selected track. Local audio requests use the IPv4 address bound by the native server. Catalog lists missing track tokens keep their queue entries; native streaming refreshes metadata for the opened track rather than fetching the entire list concurrently.
+
+Gateway calls await initial session authorization, retain the provider SESSION_ID, coalesce authorization calls, bound CSRF refresh to one retry and report HTTP/JSON/provider failures as structured codes. String and numeric IDs are normalized. Missing streaming-license options do not invalidate library browsing. A provider HTTP rejection no longer implies that the phone is offline.
+
+Track conversion tolerates empty artist lists, absent lyrics and mixed numeric/string duration metadata. Native authorization failures remain failures; license and provider stream refusals are reported without attempting the obsolete generated-URL fallback. Network reads have timeouts. Offline byte ranges use inclusive ends, support suffixes, reject invalid bounds and close their file handles.
+
+Settings > Diagnostica checks the session, native bridge and loopback health endpoint. It copies a bounded report of status codes without credentials, token values, account identifiers, response bodies or query parameters. Initialization errors offer diagnostics/retry instead of rendering a partially initialized app or waiting forever.
+
+Regression coverage: 36 Flutter tests, 5,065 byte-range assertions and eleven HTTP checks against the actual StreamServer with the remote provider replaced by a fixture that fails if called. These checks do not validate authenticated Deezer streaming or entitlement on a real device. The account website was inaccessible from the interactive test environment; no account password was stored in source, logs, fixtures or CI.
+
+GitHub Actions now performs bootstrap, analysis, tests and the ARM64 debug build on pushes to the work branch and pull requests. Its uploaded APK is a debug artifact and does not require signing secrets or account credentials.
+
+The debug variant uses `r.r.refreezer.preview` and the label PiElJay Test. It installs alongside the previously delivered debug variant because the original transient debug signing key was unavailable after the environment reset. Deliverable APKs are signed with a persistent test key stored privately, outside the repository and CI logs. The CI artifact retains the runner's temporary debug signature; it must be re-signed with the persistent test key for updates of the delivered preview app.
+
+The loopback server now binds an OS-assigned port and returns it to Flutter. Playback URLs and the health probe use that endpoint. The native HTTP fixture opens two servers concurrently and verifies distinct ports, avoiding conflicts when the preview and an older installed build are both running.

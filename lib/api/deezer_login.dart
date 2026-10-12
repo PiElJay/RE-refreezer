@@ -17,8 +17,18 @@ class DeezerLogin {
   };
   static final cookieManager = CookieManager();
 
+  static bool get emailLoginConfigured =>
+      Env.deezerClientId.trim().isNotEmpty &&
+      Env.deezerClientSecret.trim().isNotEmpty;
+
   //Login with email
   static Future<String?> getArlByEmailAndPassword(String email, String password) async {
+    if (!emailLoginConfigured) {
+      throw DeezerLoginException('AppConfiguration',
+          'Accesso diretto non disponibile: mancano le credenziali applicative '
+          'Deezer in questa build. Usa il login via browser o tramite token ARL. '
+          'Questo errore non riguarda la tua password.');
+    }
     cookieManager.reset();
     // Get initial cookies (sid) from empty getUser call
     String url =

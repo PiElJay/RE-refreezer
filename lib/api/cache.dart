@@ -38,8 +38,27 @@ class Cache {
   @JsonKey(includeToJson: false)
   StreamSubscription? sleepTimer;
 
+  @JsonKey(defaultValue: [])
+  List<String> searchQueries = [];
+
+  Future<void> rememberQuery(String query) async {
+    final text = query.trim();
+    if (text.isEmpty || text.startsWith('http')) return;
+    searchQueries.removeWhere(
+      (entry) => entry.toLowerCase() == text.toLowerCase(),
+    );
+    searchQueries.insert(0, text);
+    if (searchQueries.length > 30)
+      searchQueries.removeRange(30, searchQueries.length);
+    await save();
+  }
+
   //Search history
-  @JsonKey(name: 'searchHistory2', toJson: _searchHistoryToJson, fromJson: _searchHistoryFromJson)
+  @JsonKey(
+    name: 'searchHistory2',
+    toJson: _searchHistoryToJson,
+    fromJson: _searchHistoryFromJson,
+  )
   List<SearchHistoryItem>? searchHistory;
 
   //If download threads warning was shown
@@ -68,7 +87,9 @@ class Cache {
     searchHistory ??= [];
 
     // Remove duplicate
-    int i = searchHistory!.indexWhere((e) => e.data.id == item.id);
+    int i = searchHistory!.indexWhere(
+      (e) => e.data.runtimeType == item.runtimeType && e.data.id == item.id,
+    );
     if (i != -1) {
       searchHistory!.removeAt(i);
     }
@@ -83,7 +104,9 @@ class Cache {
       searchHistory!.add(SearchHistoryItem(item, SearchHistoryItemType.ARTIST));
     }
     if (item is Playlist) {
-      searchHistory!.add(SearchHistoryItem(item, SearchHistoryItemType.PLAYLIST));
+      searchHistory!.add(
+        SearchHistoryItem(item, SearchHistoryItemType.PLAYLIST),
+      );
     }
 
     await save();
@@ -91,7 +114,10 @@ class Cache {
 
   //Save, load
   static Future<String> getPath() async {
-    return p.join((await getApplicationDocumentsDirectory()).path, 'metacache.json');
+    return p.join(
+      (await getApplicationDocumentsDirectory()).path,
+      'metacache.json',
+    );
   }
 
   static Future wipe() async {
@@ -117,9 +143,19 @@ class Cache {
     return Cache.fromJson(cacheJson);
   }
 
-  Future save() async {
-    File file = File(await Cache.getPath());
-    file.writeAsString(jsonEncode(toJson()));
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  Future<void> _pendingSave = Future.value();
+
+  Future<void> save() {
+    final snapshot = jsonEncode(toJson());
+    final next = _pendingSave.then((_) async {
+      final file = File(await Cache.getPath());
+      final temporary = File('${file.path}.tmp');
+      await temporary.writeAsString(snapshot, flush: true);
+      await temporary.rename(file.path);
+    });
+    _pendingSave = next.catchError((Object _) {});
+    return next;
   }
 
   //JSON
@@ -128,10 +164,14 @@ class Cache {
 
   //Search History JSON
   static List<SearchHistoryItem> _searchHistoryFromJson(List<dynamic>? json) {
-    return (json ?? []).map<SearchHistoryItem>((i) => _searchHistoryItemFromJson(i)).toList();
+    return (json ?? [])
+        .map<SearchHistoryItem>((i) => _searchHistoryItemFromJson(i))
+        .toList();
   }
 
-  static SearchHistoryItem _searchHistoryItemFromJson(Map<String, dynamic> json) {
+  static SearchHistoryItem _searchHistoryItemFromJson(
+    Map<String, dynamic> json,
+  ) {
     SearchHistoryItemType type = SearchHistoryItemType.values[json['type']];
     dynamic data;
     switch (type) {
@@ -151,8 +191,13 @@ class Cache {
     return SearchHistoryItem(data, type);
   }
 
-  static List<Map<String, dynamic>> _searchHistoryToJson(List<SearchHistoryItem>? data) =>
-      (data ?? []).map<Map<String, dynamic>>((i) => {'type': i.type.index, 'data': i.data.toJson()}).toList();
+  static List<Map<String, dynamic>> _searchHistoryToJson(
+    List<SearchHistoryItem>? data,
+  ) => (data ?? [])
+      .map<Map<String, dynamic>>(
+        (i) => {'type': i.type.index, 'data': i.data.toJson()},
+      )
+      .toList();
 }
 
 @JsonSerializable()

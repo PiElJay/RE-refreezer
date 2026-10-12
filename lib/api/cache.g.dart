@@ -19,6 +19,10 @@ Cache _$CacheFromJson(Map<String, dynamic> json) => Cache(
               ?.map((e) => Sorting.fromJson(e as Map<String, dynamic>))
               .toList() ??
           []
+      ..searchQueries = (json['searchQueries'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          []
       ..searchHistory =
           Cache._searchHistoryFromJson(json['searchHistory2'] as List?)
       ..threadsWarning = json['threadsWarning'] as bool? ?? false
@@ -28,6 +32,7 @@ Map<String, dynamic> _$CacheToJson(Cache instance) => <String, dynamic>{
       'libraryTracks': instance.libraryTracks,
       'history': instance.history,
       'sorts': instance.sorts,
+      'searchQueries': instance.searchQueries,
       'searchHistory2': Cache._searchHistoryToJson(instance.searchHistory),
       'threadsWarning': instance.threadsWarning,
       'lastUpdateCheck': instance.lastUpdateCheck,

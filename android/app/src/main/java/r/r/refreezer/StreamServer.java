@@ -1,7 +1,5 @@
 package r.r.refreezer;
 
-import android.content.pm.PackageManager;
-import android.util.Log;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -28,6 +26,19 @@ public class StreamServer {
     private final DownloadLog logger;
     private final Deezer deezer;
     private boolean authorized = false;
+    private volatile boolean ready = false;
+    private volatile String serverErrorCode = "NONE";
+    HashMap<String, Object> diagnostics() {
+        HashMap<String, Object> state = new HashMap<>();
+        state.put("ready", ready); state.put("authorized", authorized);
+        state.put("errorCode", serverErrorCode.equals("NONE") ? deezer.lastErrorCode : serverErrorCode);
+        state.put("httpStatus", deezer.lastHttpStatus);
+        state.put("mediaStatus", deezer.mediaHttpStatus);
+        state.put("mediaResponse", deezer.mediaResponseType);
+        state.put("mediaFormat", deezer.mediaFormat); state.put("sessionOrigin", deezer.sessionOrigin);
+        state.put("fatal", deezer.fatalStreamError || !ready);
+        return state;
+    }
 
     StreamServer(String arl, String offlinePath) {
         //Initialize shared variables
@@ -37,19 +48,31 @@ public class StreamServer {
         this.offlinePath = offlinePath;
     }
 
+    synchronized boolean adoptSession(java.util.Map<?,?> fields) {
+        ProviderSession session = ProviderSession.fromBridge(fields, deezer.arl);
+        if (session == null) return false;
+        deezer.adoptSession(session); authorized = true; return true;
+    }
+
+    boolean matchesSession(String arl) { return Objects.equals(deezer.arl, arl); }
+    HashMap<String, Object> refreshSession() { authorized = deezer.refreshSession(); return diagnostics(); }
+
     //Create server
-    void start() {
+    void start() throws IOException {
         try {
             String host = "127.0.0.1";
-            int port = 36958;
+            int port = 0;
             server = new WebServer(host, port);
-            server.start();
-        } catch (Exception e) {
-            e.printStackTrace();
+            server.start(); ready = true;
+        } catch (IOException e) {
+            ready = false; serverErrorCode = "SERVER_BIND_FAILED"; throw e;
         }
     }
 
+    int getPort() { return server == null ? 0 : server.getListeningPort(); }
+
     void stop() {
+        ready = false;
         if (server != null)
             server.stop();
     }
@@ -89,7 +112,13 @@ public class StreamServer {
             if (session.getMethod() != Method.GET)
                 return newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, MIME_PLAINTEXT, "Only GET request supported!");
 
+            if (session.getUri().equals("/health")) return newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ready\"}");
             try {
+                String requestedId = session.getParameters().get("id") == null ? null : session.getParameters().get("id").get(0);
+                if (requestedId != null && !session.getParameters().containsKey("forceOnline")) {
+                    File local = new File(offlinePath, requestedId);
+                    if (local.isFile() && local.length() > 0) return offlineStream(session);
+                }
                 //Parse range header
                 String rangeHeader = session.getHeaders().get("range");
                 int startBytes = 0;
@@ -108,7 +137,7 @@ public class StreamServer {
                 if (session.getParameters().keySet().size() < 6) {
                     //Play offline
                     if (session.getParameters().get("id") != null) {
-                        return offlineStream(session, startBytes, end, isRanged);
+                        return offlineStream(session);
                     }
                     //Missing QP
                     return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Invalid / Missing QP");
@@ -122,70 +151,48 @@ public class StreamServer {
             }
         }
 
-        private Response offlineStream(IHTTPSession session, int startBytes, int end, boolean isRanged) {
-            //Get path
+        private Response offlineStream(IHTTPSession session) {
             String trackId = Objects.requireNonNull(session.getParameters().get("id")).get(0);
-            File file = new File(offlinePath, trackId);
-            long size = file.length();
-            //Read header
-            boolean isFlac = false;
+            File file = new File(offlinePath, trackId); long size = file.length();
+            final ByteRange range;
+            try { range = ByteRange.parse(session.getHeaders().get("range"), size); }
+            catch (IllegalArgumentException e) {
+                Response out = newFixedLengthResponse(Response.Status.RANGE_NOT_SATISFIABLE, MIME_PLAINTEXT, "Invalid byte range");
+                out.addHeader("Content-Range", "bytes */" + size); return out;
+            }
             try {
-                InputStream inputStream = new FileInputStream(file);
-                byte[] buffer = new byte[4];
-                inputStream.read(buffer, 0, 4);
-                inputStream.close();
-                if (new String(buffer).equals("fLaC"))
-                    isFlac = true;
-            } catch (Exception e) {
-                Log.d("StreamServer", "Invalid offline file: " + e.getMessage());
-                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Invalid offline file!");
+                final RandomAccessFile input = new RandomAccessFile(file, "r");
+                byte[] signature = new byte[4]; input.read(signature);
+                boolean flac = new String(signature).equals("fLaC"); input.seek(range.start);
+                InputStream bounded = new InputStream() {
+                    long remaining = range.length();
+                    @Override public int read() throws IOException {
+                        if (remaining <= 0) return -1;
+                        int value = input.read(); if (value >= 0) remaining--; return value;
+                    }
+                    @Override public int read(byte[] b, int off, int len) throws IOException {
+                        if (len == 0) return 0; if (remaining <= 0) return -1;
+                        int count = input.read(b, off, (int)Math.min(len, remaining));
+                        if (count > 0) remaining -= count; return count;
+                    }
+                    @Override public void close() throws IOException { input.close(); }
+                };
+                Response out = newFixedLengthResponse(range.partial ? Response.Status.PARTIAL_CONTENT : Response.Status.OK,
+                    flac ? "audio/flac" : "audio/mpeg", bounded, range.length());
+                if (range.partial) out.addHeader("Content-Range", "bytes " + range.start + "-" + range.end + "/" + size);
+                out.addHeader("Accept-Ranges", "bytes");
+                streams.put(trackId, new StreamInfo(flac ? "FLAC" : "MP3", size, "Offline")); return out;
+            } catch (IOException e) {
+                serverErrorCode = "LOCAL_FILE_READ_FAILED";
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, serverErrorCode);
             }
-            //Open file
-            RandomAccessFile randomAccessFile;
-            try {
-                randomAccessFile = new RandomAccessFile(file, "r");
-                randomAccessFile.seek(startBytes);
-            } catch (Exception e) {
-                Log.d("StreamServer", "Failed getting offline data: " + e.getMessage());
-                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Failed getting data!");
-            }
-
-            //Generate response
-            Response response = newFixedLengthResponse(
-                    isRanged ? Response.Status.PARTIAL_CONTENT : Response.Status.OK,
-                    isFlac ? "audio/flac" : "audio/mpeg",
-                    new InputStream() {
-                        @Override
-                        public int read() throws IOException {
-                            return 0;
-                        }
-                        //Pass thru
-                        @Override
-                        public int read(byte[] b, int off, int len) throws IOException {
-                            return randomAccessFile.read(b, off, len);
-                        }
-                    },
-                    ((end == -1) ? size : end) - startBytes
-            );
-            //Ranged header
-            if (isRanged) {
-                String range = "bytes " + Integer.toString(startBytes) + "-" + Long.toString((end == -1) ? size - 1 : end);
-                range += "/" + Long.toString(size);
-                response.addHeader("Content-Range", range);
-            }
-            response.addHeader("Accept-Ranges", "bytes");
-
-            //Save stream info
-            streams.put(trackId, new StreamInfo((isFlac ? "FLAC" : "MP3"), size, "Offline"));
-
-            return response;
         }
 
         private Response deezerStream(IHTTPSession session, int startBytes, int end, boolean isRanged) {
             // Authorize
             if (!authorized) {
-                deezer.authorize();
-                authorized = true;
+                authorized = deezer.authorize();
+                if (!authorized) return newFixedLengthResponse(Response.Status.UNAUTHORIZED, MIME_PLAINTEXT, "GW_NOT_AUTHENTICATED");
             }
 
             //Get QP into Quality Info
@@ -204,7 +211,8 @@ public class StreamServer {
                 if (sURL == null)
                     throw new Exception("No more to fallback!");
             } catch (Exception e) {
-                return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Fallback failed!");
+                if (deezer.lastErrorCode.equals("NONE")) deezer.lastErrorCode = "MEDIA_SOURCE_UNAVAILABLE";
+                return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, deezer.lastErrorCode);
             }
 
             //Calculate Deezer offsets
@@ -220,13 +228,19 @@ public class StreamServer {
                 HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
                 //Set headers
                 connection.setConnectTimeout(10000);
+                connection.setReadTimeout(10000);
                 connection.setRequestMethod("GET");
                 connection.setRequestProperty("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36");
                 connection.setRequestProperty("Accept-Language", "*");
                 connection.setRequestProperty("Accept", "*/*");
                 connection.setRequestProperty("Range", "bytes=" + Integer.toString(deezerStart) + "-" + ((end == -1) ? "" : Integer.toString(end)));
                 connection.connect();
-
+                int status = connection.getResponseCode();
+                if (status >= 400) {
+                    deezer.lastErrorCode = "CDN_HTTP_" + status; connection.disconnect();
+                    return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, deezer.lastErrorCode);
+                }
+                deezer.lastErrorCode = "NONE"; deezer.fatalStreamError = false; serverErrorCode = "NONE";
                 Response outResponse;
                 // Encrypted response
                 if (qualityInfo.encrypted) {

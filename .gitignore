@@ -52,7 +52,6 @@ android/app/.cxx
 .pub/
 /build/
 coverage/
-pubspec.lock
 devtools_options.yaml
 
 # Web related
@@ -74,3 +73,7 @@ lib/utils/env.g.dart
 # Possible translations remnants
 translations/refreezer.zip
 translations/ReFreezer (translations).zip
+
+/android/build/
+
+/android/.kotlin/

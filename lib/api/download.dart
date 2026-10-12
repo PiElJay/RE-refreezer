@@ -16,6 +16,7 @@ import '../api/deezer.dart';
 import '../api/definitions.dart';
 import '../utils/navigator_keys.dart';
 import '../settings.dart';
+import '../ui/quality_notice.dart';
 import '../service/network_monitor.dart';
 import '../translations.i18n.dart';
 import '../utils/file_utils.dart';
@@ -183,6 +184,9 @@ class DownloadManager {
             ],
           );
         });
+    final context = mainNavigatorKey.currentContext;
+    if (quality == null || context == null || !context.mounted) return null;
+    if (!await confirmOnlineQuality(context, quality!)) return null;
     return quality;
   }
 

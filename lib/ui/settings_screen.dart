@@ -25,6 +25,7 @@ import 'package:scrobblenaut/scrobblenaut.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import 'diagnostics_screen.dart';
+import 'quality_notice.dart';
 import '../api/cache.dart';
 import '../fonts/refreezer_icons.dart';
 import '../main.dart';
@@ -616,6 +617,7 @@ class QualityPicker extends StatefulWidget {
 
 class _QualityPickerState extends State<QualityPicker> {
   late AudioQuality _quality;
+  bool _changingQuality = false;
 
   @override
   void initState() {
@@ -642,18 +644,21 @@ class _QualityPickerState extends State<QualityPicker> {
   }
 
   //Update quality in settings
-  void _updateQuality(AudioQuality q) async {
+  Future<void> _updateQuality(AudioQuality q) async {
+    if (q == _quality || _changingQuality) return;
+    _changingQuality = true;
+    try {
+    if (widget.field != 'offline' && !await confirmOnlineQuality(context, q)) return;
+    if (!mounted) return;
     setState(() {
       _quality = q;
     });
     switch (widget.field) {
       case 'mobile':
         settings.mobileQuality = _quality;
-        settings.updateAudioServiceQuality();
         break;
       case 'wifi':
         settings.wifiQuality = _quality;
-        settings.updateAudioServiceQuality();
         break;
       case 'download':
         settings.downloadQuality = _quality;
@@ -663,6 +668,17 @@ class _QualityPickerState extends State<QualityPicker> {
         break;
     }
     await settings.save();
+    if (widget.field == 'mobile' || widget.field == 'wifi') {
+      await settings.updateAudioServiceQuality();
+    }
+    } catch (error) {
+      Logger.root.warning('Unable to apply audio quality (${error.runtimeType})');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Impossibile applicare la qualità. Controlla le impostazioni e riprova.'),
+      ));
+    } finally {
+      _changingQuality = false;
+    }
   }
 
   @override
@@ -671,6 +687,7 @@ class _QualityPickerState extends State<QualityPicker> {
       children: <Widget>[
         ListTile(
           title: const Text('MP3 128kbps'),
+          subtitle: widget.field == 'offline' ? null : const Text('Consigliato per Deezer Free'),
           leading: Radio(
             groupValue: _quality,
             value: AudioQuality.MP3_128,
@@ -679,6 +696,7 @@ class _QualityPickerState extends State<QualityPicker> {
         ),
         ListTile(
           title: const Text('MP3 320kbps'),
+          subtitle: widget.field == 'offline' ? null : const Text('Richiede un abbonamento abilitato'),
           leading: Radio(
             groupValue: _quality,
             value: AudioQuality.MP3_320,
@@ -687,6 +705,7 @@ class _QualityPickerState extends State<QualityPicker> {
         ),
         ListTile(
           title: const Text('FLAC'),
+          subtitle: widget.field == 'offline' ? null : const Text('Richiede un abbonamento abilitato'),
           leading: Radio(
             groupValue: _quality,
             value: AudioQuality.FLAC,

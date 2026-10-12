@@ -41,13 +41,13 @@ class Settings {
   bool offlineMode = false;
 
   //Quality
-  @JsonKey(defaultValue: AudioQuality.MP3_320)
+  @JsonKey(defaultValue: AudioQuality.MP3_128)
   late AudioQuality wifiQuality;
   @JsonKey(defaultValue: AudioQuality.MP3_128)
   late AudioQuality mobileQuality;
   @JsonKey(defaultValue: AudioQuality.FLAC)
   late AudioQuality offlineQuality;
-  @JsonKey(defaultValue: AudioQuality.FLAC)
+  @JsonKey(defaultValue: AudioQuality.MP3_128)
   late AudioQuality downloadQuality;
 
   //Download options

@@ -171,11 +171,11 @@ void main() {
           await player.shuffle();
           await player.setShuffleModeEnabled(true);
         }
-        final originalOrder = player.effectiveSequence.map((s) => s.tag).toList();
+        final originalOrder = player.sequenceState.effectiveSequence.map((s) => s.tag).toList();
         await player.addAudioSource(song('tail'));
-        expect(player.effectiveSequence.map((s) => s.tag), [...originalOrder, 'tail']);
+        expect(player.sequenceState.effectiveSequence.map((s) => s.tag), [...originalOrder, 'tail']);
         await insertNextAudioSource(player, song('next'), order);
-        final effective = player.effectiveSequence.map((s) => s.tag).toList();
+        final effective = player.sequenceState.effectiveSequence.map((s) => s.tag).toList();
         final expected = [...originalOrder, 'tail'];
         expected.insert(expected.indexOf('b') + 1, 'next');
         expect(effective, expected);
@@ -195,6 +195,9 @@ void main() {
     });
   }
   test('empty queue accepts a next item and keeps duplicate occurrences', () async {
+    final previous = api.JustAudioPlatform.instance;
+    final platform = TestAudioPlatform();
+    api.JustAudioPlatform.instance = platform;
     final player = AudioPlayer(handleInterruptions: false,
       handleAudioSessionActivation: false, androidApplyAudioAttributes: false);
     final order = QueueShuffleOrder();
@@ -203,7 +206,11 @@ void main() {
       await insertNextAudioSource(player, AudioSource.uri(Uri.parse('file:///a.mp3'), tag: 'a'), order);
       await player.addAudioSource(AudioSource.uri(Uri.parse('file:///a.mp3'), tag: 'a'));
       expect(player.sequence.map((s) => s.tag), ['a', 'a']);
-    } finally { await player.dispose(); }
+    } finally {
+      await player.dispose();
+      api.JustAudioPlatform.instance = previous;
+      await Future.wait(platform.players.map((p) => p.events.close()));
+    }
   });
 
 }

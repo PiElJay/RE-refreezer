@@ -806,7 +806,7 @@ class AudioPlayerHandler extends BaseAudioHandler
         await _player.setShuffleModeEnabled(false);
         _requestedIndex = resolved;
         queueSource = newQueueSource;
-          await loadAudioQueue(_player, sources, resolved, shuffleOrder: _shuffleOrder);
+        await loadAudioQueue(_player, sources, resolved, shuffleOrder: _shuffleOrder);
         _sourceOffset = newQueue.length;
         _sourceExhausted = false;
         _failedIndices.clear();

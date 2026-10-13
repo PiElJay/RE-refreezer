@@ -67,7 +67,7 @@ class AudioPlayerHandler extends BaseAudioHandler
 
   late final Future<void> _initialization;
   late AudioPlayer _player;
-  var _playlist = ConcatenatingAudioSource(children: []);
+  final _shuffleOrder = QueueShuffleOrder();
   // Prevent MediaItem change while shuffling or otherwise rearranging the queue by just_audio internals
   bool _rearranging = false;
 
@@ -338,31 +338,38 @@ class AudioPlayerHandler extends BaseAudioHandler
 
   @override
   Future<void> addQueueItem(MediaItem mediaItem) async {
+    await _initialization;
     await _serialize(() async {
       final source = await _itemToSource(mediaItem);
-      if (source != null) await _playlist.add(source);
+      if (source == null) throw StateError("Brano non disponibile");
+      await _player.addAudioSource(source);
+      await _saveQueueToFile();
     });
   }
 
   @override
   Future<void> addQueueItems(List<MediaItem> mediaItems) async {
+    await _initialization;
     await _serialize(() async {
-      await _playlist.addAll(await _itemsToSources(mediaItems));
+      await _player.addAudioSources(await _itemsToSources(mediaItems));
     });
   }
 
   @override
   Future<void> insertQueueItem(int index, MediaItem mediaItem) async {
+    await _initialization;
     await _serialize(() async {
       final source = await _itemToSource(mediaItem);
-      if (source == null) return;
-      final insertion = index == -1 ? (_player.currentIndex ?? -1) + 1 : index;
-      await _playlist.insert(
-        insertion.clamp(0, _playlist.children.length),
-        source,
-      );
+      if (source == null) throw StateError('Brano non disponibile');
+      if (index == -1) {
+        await insertNextAudioSource(_player, source, _shuffleOrder);
+      } else {
+        await _player.insertAudioSource(
+          index.clamp(0, _player.audioSources.length), source);
+      }
       _failedIndices.clear();
       _retriedIds.clear();
+      await _saveQueueToFile();
     });
   }
 
@@ -373,8 +380,8 @@ class AudioPlayerHandler extends BaseAudioHandler
       final sources = await _itemsToSources(queue);
       _rearranging = true;
       try {
-        await _playlist.clear();
-        await _playlist.addAll(sources);
+        await _player.clearAudioSources();
+        await _player.addAudioSources(sources);
       } finally {
         _rearranging = false;
       }
@@ -394,7 +401,7 @@ class AudioPlayerHandler extends BaseAudioHandler
   Future<void> removeQueueItem(MediaItem mediaItem) async {
     await _serialize(() async {
       final index = queue.value.indexOf(mediaItem);
-      if (index >= 0) await _playlist.removeAt(index);
+      if (index >= 0) await _player.removeAudioSourceAt(index);
       _failedIndices.clear();
       _retriedIds.clear();
       _publishCurrentItem();
@@ -404,8 +411,8 @@ class AudioPlayerHandler extends BaseAudioHandler
   @override
   Future<void> removeQueueItemAt(int index) async {
     await _serialize(() async {
-      if (index >= 0 && index < _playlist.children.length)
-        await _playlist.removeAt(index);
+      if (index >= 0 && index < _player.audioSources.length)
+        await _player.removeAudioSourceAt(index);
       _failedIndices.clear();
       _retriedIds.clear();
       _publishCurrentItem();
@@ -416,7 +423,7 @@ class AudioPlayerHandler extends BaseAudioHandler
     await _serialize(() async {
       _rearranging = true;
       try {
-        await _playlist.move(currentIndex, newIndex);
+        await _player.moveAudioSource(currentIndex, newIndex);
       } finally {
         _rearranging = false;
       }
@@ -452,7 +459,7 @@ class AudioPlayerHandler extends BaseAudioHandler
   Future<void> skipToQueueItem(int index) async {
     ++_selectionGeneration;
     await _serialize(() async {
-      if (index < 0 || index >= _playlist.children.length) return;
+      if (index < 0 || index >= _player.audioSources.length) return;
       _failedIndices.clear();
       _retriedIds.clear();
       await _player.seek(Duration.zero, index: index);
@@ -580,7 +587,7 @@ class AudioPlayerHandler extends BaseAudioHandler
   Future<void> _loadEmptyPlaylist() async {
     try {
       Logger.root.info('Loading empty playlist...');
-      await _player.setAudioSource(_playlist);
+      await _player.setAudioSources([], shuffleOrder: _shuffleOrder);
     } catch (e) {
       Logger.root.severe('Error loading empty playlist: $e');
     }
@@ -752,11 +759,11 @@ class AudioPlayerHandler extends BaseAudioHandler
     try {
       _requestedIndex = resolved;
       await _player.setShuffleModeEnabled(false);
-      _playlist = ConcatenatingAudioSource(children: sources);
       await loadAudioQueue(
         _player,
-        _playlist,
+        sources,
         resolved,
+        shuffleOrder: _shuffleOrder,
         position: matching >= 0 ? position : Duration.zero,
       );
     } finally {
@@ -799,8 +806,7 @@ class AudioPlayerHandler extends BaseAudioHandler
         await _player.setShuffleModeEnabled(false);
         _requestedIndex = resolved;
         queueSource = newQueueSource;
-        _playlist = ConcatenatingAudioSource(children: sources);
-        await loadAudioQueue(_player, _playlist, resolved);
+        await loadAudioQueue(_player, sources, resolved, shuffleOrder: _shuffleOrder);
         _sourceOffset = newQueue.length;
         _sourceExhausted = false;
         _failedIndices.clear();
@@ -889,7 +895,7 @@ class AudioPlayerHandler extends BaseAudioHandler
           _sourceOffset += fetchedCount;
           _sourceExhausted = fetchedCount < 25;
         }
-        if (sources.isNotEmpty) await _playlist.addAll(sources);
+        if (sources.isNotEmpty) await _player.addAudioSources(sources);
       });
     } catch (_) {
       Logger.root.warning('Could not extend queue; keeping current playback');
@@ -990,8 +996,8 @@ class AudioPlayerHandler extends BaseAudioHandler
                   return;
                 _rearranging = true;
                 try {
-                  await _playlist.removeAt(failed);
-                  await _playlist.insert(failed, replacement);
+                  await _player.removeAudioSourceAt(failed);
+                  await _player.insertAudioSource(failed, replacement);
                   await _player.seek(Duration.zero, index: failed);
                   replaced = true;
                 } finally {

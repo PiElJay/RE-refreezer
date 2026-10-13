@@ -166,23 +166,38 @@ class MenuSheet {
   // TRACK OPTIONS
   //===================
 
+  bool _queueActionPending = false;
+
+  Future<void> _enqueue(Track track, BuildContext context, {required bool next}) async {
+    if (_queueActionPending) return;
+    _queueActionPending = true;
+    try {
+      final handler = GetIt.I<AudioPlayerHandler>();
+      if (next) { await handler.insertQueueItem(-1, track.toMediaItem()); }
+      else { await handler.addQueueItem(track.toMediaItem()); }
+      if (context.mounted) {
+        _close(context);
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+          content: Text(next ? 'Il brano verrà riprodotto subito dopo' : 'Brano aggiunto alla fine della coda')));
+      }
+    } catch (_) {
+      if (context.mounted) ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Impossibile aggiungere il brano. Riprova.')));
+    } finally { _queueActionPending = false; }
+  }
+
   Widget addToQueueNext(Track t, BuildContext context) => ListTile(
     title: Text('Play next'.i18n),
+    subtitle: const Text('Dopo il brano in ascolto, mantenendo il resto della coda'),
     leading: const Icon(Icons.playlist_play),
-    onTap: () async {
-      //-1 = next
-      await GetIt.I<AudioPlayerHandler>().insertQueueItem(-1, t.toMediaItem());
-      if (context.mounted) _close(context);
-    },
+    onTap: () => _enqueue(t, context, next: true),
   );
 
   Widget addToQueue(Track t, BuildContext context) => ListTile(
     title: Text('Add to queue'.i18n),
+    subtitle: const Text('Alla fine della coda attuale'),
     leading: const Icon(Icons.playlist_add),
-    onTap: () async {
-      await GetIt.I<AudioPlayerHandler>().addQueueItem(t.toMediaItem());
-      if (context.mounted) _close(context);
-    },
+    onTap: () => _enqueue(t, context, next: false),
   );
 
   Widget addTrackFavorite(Track t, BuildContext context) => ListTile(

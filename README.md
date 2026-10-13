@@ -6,7 +6,7 @@
 <p align="center"><strong>La musica online e quella sul tuo telefono, nello stesso player.</strong></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versione-1.0.1-blue" alt="Versione 1.0.1">
+  <img src="https://img.shields.io/badge/versione-1.0.2-blue" alt="Versione 1.0.1">
   <img src="https://img.shields.io/badge/Android-ARM64-3DDC84" alt="Android ARM64">
   <img src="https://img.shields.io/badge/licenza-GPL--3.0-informational" alt="Licenza GPL-3.0">
 </p>

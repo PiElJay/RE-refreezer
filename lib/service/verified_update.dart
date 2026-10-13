@@ -37,7 +37,7 @@ Future<File> downloadVerifiedUpdate({
       response = await client.send(request).timeout(const Duration(seconds: 20));
       if ([301, 302, 303, 307, 308].contains(response.statusCode)) {
         final location = response.headers['location'];
-        await response.stream.drain<void>();
+        await response.stream.timeout(const Duration(seconds: 30)).drain<void>();
         if (location == null) throw const FormatException('Invalid redirect');
         current = current.resolve(location);
         if (current.scheme != 'https' || current.userInfo.isNotEmpty)

@@ -16,4 +16,8 @@ void main() {
       'Cookie=[REDACTED]\nAuthorization=[REDACTED]',
     );
   });
+  test('local server access nonce is redacted', () {
+    expect(redactLog('http://127.0.0.1:123/?_auth=secret&id=1'), isNot(contains('secret')));
+  });
+
 }

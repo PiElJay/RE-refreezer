@@ -303,13 +303,13 @@ class _MainScreenState extends State<MainScreen>
   }
 
   Future<void> _startStreamingServer() async {
-    final port = await DownloadManager.platform.invokeMethod<int>(
+    final endpoint = await DownloadManager.platform.invokeMapMethod<String, dynamic>(
       'startServer',
       {'arl': settings.arl, 'session': deezerAPI.playbackSession},
     );
-    if (port == null)
+    if (endpoint == null)
       throw StateError('Local audio server did not return its port');
-    LocalStreamEndpoint.instance.configure(port);
+    LocalStreamEndpoint.instance.configure(endpoint['port'] as int, endpoint['token'] as String);
   }
 
   Future<void> _setupServiceLocator() async {

@@ -19,7 +19,7 @@ class AppDiagnostics extends ChangeNotifier {
   }
 
   String report() => [
-    'VYBE MUSIC - diagnostica 1.0.1',
+    'VYBE MUSIC - diagnostica 1.0.2',
     ..._state.entries.map((entry) => '${entry.key}: ${entry.value}'),
     '',
     ..._events,

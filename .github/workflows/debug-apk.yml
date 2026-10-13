@@ -42,6 +42,8 @@ jobs:
         run: sh tool/bootstrap.sh
       - name: Analyze
         run: flutter analyze --no-fatal-infos
+      - name: Test SQLite query boundaries
+        run: python3 tool/test_sql_parameters.py
       - name: Test Flutter
         run: flutter test
       - name: Test native byte ranges

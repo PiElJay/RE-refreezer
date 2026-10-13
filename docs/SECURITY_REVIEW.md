@@ -38,6 +38,10 @@ Sono rimossi dal manifest finale i permessi READ_MEDIA_IMAGES e READ_MEDIA_VIDEO
 
 La verifica sull’APK compilato controlla anche l’assenza di permessi per microfono, contatti, posizione precisa e fotocamera, oltre alle configurazioni di backup e rete.
 
+### Query SQLite locali
+
+Le ricerche offline e alcuni controlli di appartenenza interpolavano direttamente testo e ID nelle query SQL. Una stringa contenente virgolette poteva modificare la query o generare errori. I cinque punti individuati ora utilizzano parametri SQLite, separando il testo dalla sintassi. La prova di regressione esegue le query di ricerca estratte dal codice su un database SQLite temporaneo: un payload con virgolette e `OR 1=1` viene trattato come testo e non amplia i risultati.
+
 ## Limiti residui
 
 - L’ARL resta memorizzata in chiaro nello spazio privato dell’app: il sandbox Android e l’esclusione dai backup riducono l’esposizione, ma non proteggono da root o compromissione del processo. La migrazione a un archivio basato su Android Keystore richiede una modifica separata e test sul dispositivo.

@@ -530,9 +530,9 @@ class DownloadManager {
       if (rawTrack.isNotEmpty) {
         //Count occurrences in playlists and albums
         List albums = await db!
-            .rawQuery('SELECT (id) FROM Albums WHERE tracks LIKE "%${t.id}%"');
+            .rawQuery('SELECT (id) FROM Albums WHERE tracks LIKE ?', ['%${t.id}%']);
         List playlists = await db!.rawQuery(
-            'SELECT (id) FROM Playlists WHERE tracks LIKE "%${t.id}%"');
+            'SELECT (id) FROM Playlists WHERE tracks LIKE ?', ['%${t.id}%']);
         if (albums.length + playlists.length == 0 &&
             rawTrack[0]['favorite'] == 0) {
           //Safe to remove
@@ -607,21 +607,21 @@ class DownloadManager {
         SearchResults(tracks: [], albums: [], artists: [], playlists: []);
     //Tracks
     List tracksData = await db!.rawQuery(
-        'SELECT * FROM Tracks WHERE offline == 1 AND title like "%$query%"');
+        'SELECT * FROM Tracks WHERE offline == 1 AND title like ?', ['%$query%']);
     for (Map trackData in tracksData) {
       var offlineTrack = await getOfflineTrack(trackData['id']);
       if (offlineTrack != null) results.tracks!.add(offlineTrack);
     }
     //Albums
     List albumsData = await db!.rawQuery(
-        'SELECT (id) FROM Albums WHERE offline == 1 AND title like "%$query%"');
+        'SELECT (id) FROM Albums WHERE offline == 1 AND title like ?', ['%$query%']);
     for (Map rawAlbum in albumsData) {
       var offlineAlbum = await getOfflineAlbum(rawAlbum['id']);
       if (offlineAlbum != null) results.albums!.add(offlineAlbum);
     }
     //Playlists
     List playlists = await db!
-        .rawQuery('SELECT * FROM Playlists WHERE title like "%$query%"');
+        .rawQuery('SELECT * FROM Playlists WHERE title like ?', ['%$query%']);
     for (Map playlist in playlists) {
       var offlinePlaylist = await getOfflinePlaylist(playlist['id']);
       if (offlinePlaylist != null) results.playlists!.add(offlinePlaylist);

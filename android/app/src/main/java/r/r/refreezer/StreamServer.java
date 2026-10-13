@@ -20,6 +20,21 @@ public class StreamServer {
     public HashMap<String, StreamInfo> streams = new HashMap<>();
 
     private WebServer server;
+    private final String accessToken = newToken();
+    private static String newToken() {
+        byte[] bytes = new byte[32]; new java.security.SecureRandom().nextBytes(bytes);
+        StringBuilder out = new StringBuilder();
+        for (byte value : bytes) out.append(String.format("%02x", value & 255));
+        return out.toString();
+    }
+    String getAccessToken() { return accessToken; }
+    private File offlineFile(String id) throws IOException {
+        if (id == null || !id.matches("[A-Za-z0-9_-]{1,128}")) throw new IOException("Invalid track ID");
+        File root = new File(offlinePath).getCanonicalFile();
+        File candidate = new File(root, id).getCanonicalFile();
+        if (!root.equals(candidate.getParentFile())) throw new IOException("File outside offline directory");
+        return candidate;
+    }
     private final String offlinePath;
 
     //Shared log & API
@@ -108,6 +123,13 @@ public class StreamServer {
 
         @Override
         public Response serve(IHTTPSession session) {
+            java.util.List<String> supplied = session.getParameters().get("_auth");
+            if (supplied == null || supplied.size() != 1 || !java.security.MessageDigest.isEqual(
+                    accessToken.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    supplied.get(0).getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                return newFixedLengthResponse(Response.Status.FORBIDDEN, MIME_PLAINTEXT, "Forbidden");
+            if (!session.getUri().equals("/") && !session.getUri().equals("/health"))
+                return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found");
             //Must be only GET
             if (session.getMethod() != Method.GET)
                 return newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, MIME_PLAINTEXT, "Only GET request supported!");
@@ -116,7 +138,9 @@ public class StreamServer {
             try {
                 String requestedId = session.getParameters().get("id") == null ? null : session.getParameters().get("id").get(0);
                 if (requestedId != null && !session.getParameters().containsKey("forceOnline")) {
-                    File local = new File(offlinePath, requestedId);
+                    File local;
+                    try { local = offlineFile(requestedId); }
+                    catch (IOException e) { return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Invalid track ID"); }
                     if (local.isFile() && local.length() > 0) return offlineStream(session);
                 }
                 //Parse range header
@@ -134,7 +158,7 @@ public class StreamServer {
                 }
 
                 //Check query parameters
-                if (session.getParameters().keySet().size() < 6) {
+                if (!session.getParameters().containsKey("q")) {
                     //Play offline
                     if (session.getParameters().get("id") != null) {
                         return offlineStream(session);
@@ -146,14 +170,18 @@ public class StreamServer {
                 //Stream
                 return deezerStream(session, startBytes, end, isRanged);
             } catch (Exception e) {
-                e.printStackTrace();
+                // Keep provider/session details out of logs.
                 return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "An error occurred while serving the request.");
             }
         }
 
         private Response offlineStream(IHTTPSession session) {
             String trackId = Objects.requireNonNull(session.getParameters().get("id")).get(0);
-            File file = new File(offlinePath, trackId); long size = file.length();
+            File file;
+            try { file = offlineFile(trackId); }
+            catch (IOException e) { return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Invalid track ID"); }
+            if (!file.isFile()) return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found");
+            long size = file.length();
             final ByteRange range;
             try { range = ByteRange.parse(session.getHeaders().get("range"), size); }
             catch (IllegalArgumentException e) {
@@ -322,7 +350,7 @@ public class StreamServer {
 
                 return outResponse;
             } catch (Exception e) {
-                e.printStackTrace();
+                // Keep provider/session details out of logs.
             }
             return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Failed getting data!");
         }

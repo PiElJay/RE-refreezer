@@ -15,6 +15,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../api/cache.dart';
+import '../service/verified_update.dart';
 import '../api/download.dart';
 import '../translations.i18n.dart';
 import '../ui/elements.dart';
@@ -102,27 +103,19 @@ class _UpdaterScreenState extends State<UpdaterScreen> {
       if (url == null) {
         throw Exception('No compatible download available');
       }
-      //Start request
-      http.Client client = http.Client();
-      http.StreamedResponse res =
-          await client.send(http.Request('GET', Uri.parse(url)));
-      int? size = res.contentLength;
-      //Open file
-      String path =
-          p.join((await getExternalStorageDirectory())!.path, 'update.apk');
-      File file = File(path);
-      IOSink fileSink = file.openWrite();
-      //Update progress
-      Future.doWhile(() async {
-        int received = await file.length();
-        setState(() => _progress = received / size!.toInt());
-        return received != size;
-      });
-      //Pipe
-      await res.stream.pipe(fileSink);
-      fileSink.close();
-
-      OpenFilex.open(path);
+      final asset = _versionDownload!;
+      final directory = await getApplicationSupportDirectory();
+      final file = File(p.join(directory.path, 'update.apk'));
+      final client = http.Client();
+      try {
+        await downloadVerifiedUpdate(client: client, url: Uri.parse(url),
+          expectedDigest: asset.digest ?? '', expectedSize: asset.size ?? 0,
+          destination: file, onProgress: (value) {
+            if (mounted) setState(() => _progress = value);
+          });
+      } finally { client.close(); }
+      if (!mounted) return;
+      await OpenFilex.open(file.path);
       setState(() {
         _buttonEnabled = true;
         _progress = 0.0;
@@ -295,6 +288,8 @@ class ReFreezerLatest {
           return ReFreezerDownload(
             abi: abi,
             directUrl: asset['browser_download_url'],
+            digest: asset['digest'] is String ? asset['digest'] : null,
+            size: asset['size'] is int ? asset['size'] : null,
           );
         })
         .where((download) => download.abi != 'unknown')
@@ -377,7 +372,9 @@ class ReFreezerDownload {
   final String abi;
   final String directUrl;
   final List<String> architectures;
+  final String? digest;
+  final int? size;
 
-  ReFreezerDownload({required this.abi, required this.directUrl})
+  ReFreezerDownload({required this.abi, required this.directUrl, this.digest, this.size})
       : architectures = ReFreezerLatest.abiMap[abi] ?? [abi];
 }

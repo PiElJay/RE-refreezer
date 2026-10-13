@@ -206,7 +206,9 @@ public class MainActivity extends AudioServiceActivity {
                     }
                 }
                 streamServer.adoptSession(call.argument("session"));
-                result.success(streamServer.getPort());
+                HashMap<String, Object> endpoint = new HashMap<>();
+                endpoint.put("port", streamServer.getPort()); endpoint.put("token", streamServer.getAccessToken());
+                result.success(endpoint);
                 return;
             }
             if (call.method.equals("setStreamingSession")) {

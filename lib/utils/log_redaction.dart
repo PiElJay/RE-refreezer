@@ -9,7 +9,7 @@ String redactLog(String text) {
   );
   safe = safe.replaceAllMapped(
     RegExp(
-      r'''((?:arl|trackToken|licenseToken|access_token|apiKey|apiSecret|clientSecret)\s*[=:]\s*)[^\s&\n,}]+''',
+      r'''((?:_auth|arl|trackToken|licenseToken|access_token|apiKey|apiSecret|clientSecret)\s*[=:]\s*)[^\s&\n,}]+''',
       caseSensitive: false,
     ),
     (match) => '${match.group(1)}[REDACTED]',

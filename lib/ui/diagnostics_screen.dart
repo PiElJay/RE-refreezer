@@ -72,8 +72,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     setState(() => _checking = true);
     try {
       await deezerAPI.authorize();
-      final port = await DownloadManager.platform.invokeMethod('startServer', {'arl': deezerAPI.arl, 'session': deezerAPI.playbackSession});
-      if (port is int) LocalStreamEndpoint.instance.configure(port);
+      final endpoint = await DownloadManager.platform.invokeMapMethod<String, dynamic>('startServer', {'arl': deezerAPI.arl, 'session': deezerAPI.playbackSession});
+      if (endpoint != null) LocalStreamEndpoint.instance.configure(endpoint['port'] as int, endpoint['token'] as String);
       final state = await DownloadManager.platform.invokeMapMethod<String, dynamic>('getPlaybackDiagnostics');
       final success = state?['authorized'] == true;
       _diagnostics.record('nativeSession', success ? 'SESSION_RENEWED' : 'RENEWAL_FAILED');

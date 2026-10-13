@@ -5,12 +5,14 @@ void main() {
   test(
     'stream credentials stay in encoded query values on the assigned loopback port',
     () {
-      final endpoint = LocalStreamEndpoint()..configure(60345);
+      final endpoint = LocalStreamEndpoint()..configure(60345, 'a' * 64);
       final uri = endpoint.track({
         'id': '1',
+        '_auth': 'untrusted override',
         'trackToken': 'test+/=&forceOnline=1',
       });
       expect(uri.host, '127.0.0.1');
+      expect(uri.queryParameters['_auth'], 'a' * 64);
       expect(uri.port, 60345);
       expect(uri.queryParameters['trackToken'], 'test+/=&forceOnline=1');
       expect(uri.queryParameters.containsKey('forceOnline'), isFalse);

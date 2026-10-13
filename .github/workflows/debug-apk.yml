@@ -51,7 +51,9 @@ jobs:
       - name: Test safe media diagnostics
         run: bash tool/test_media_responses.sh
       - name: Build ARM64 APK
-        run: flutter build apk --release --target-platform android-arm64 --split-per-abi --verbose
+        env:
+          GRADLE_OPTS: '-Dorg.gradle.logging.stacktrace=full'
+        run: flutter build apk --release --target-platform android-arm64 --split-per-abi
       - name: Verify APK security configuration
         run: bash tool/test_apk_security.sh
       - name: Test real offline HTTP server

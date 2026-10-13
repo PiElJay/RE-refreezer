@@ -50,6 +50,15 @@ class TestPlayer extends api.AudioPlayerPlatform {
     return api.LoadResponse(duration: const Duration(minutes: 3));
   }
 
+  final inserts = <api.ConcatenatingInsertAllRequest>[];
+  @override
+  Future<api.ConcatenatingInsertAllResponse> concatenatingInsertAll(
+    api.ConcatenatingInsertAllRequest request,
+  ) async {
+    inserts.add(request);
+    return api.ConcatenatingInsertAllResponse();
+  }
+
   @override
   Future<api.SetVolumeResponse> setVolume(api.SetVolumeRequest request) async =>
       api.SetVolumeResponse();
@@ -91,18 +100,16 @@ void main() {
         androidApplyAudioAttributes: false,
       );
       try {
-        final playlist = await loadAudioQueue(
+        await loadAudioQueue(
           player,
-          ConcatenatingAudioSource(
-            children: [
+          [
               AudioSource.uri(Uri.parse('http://127.0.0.1:36958/?id=bad')),
               AudioSource.uri(Uri.parse('http://127.0.0.1:36958/?id=good')),
-            ],
-          ),
+          ],
           1,
           position: const Duration(seconds: 12),
         );
-        expect(playlist.children.length, 2);
+        expect(player.audioSources.length, 2);
         expect(platform.lastPlayer.requests.length, 1);
         expect(platform.lastPlayer.requests.single.initialIndex, 1);
         expect(
@@ -128,12 +135,10 @@ void main() {
         handleAudioSessionActivation: false,
         androidApplyAudioAttributes: false,
       );
-      final playlist = ConcatenatingAudioSource(
-        children: [
+      final playlist = <AudioSource>[
           AudioSource.uri(Uri.parse('http://127.0.0.1:36958/?id=bad')),
           AudioSource.uri(Uri.parse('http://127.0.0.1:36958/?id=good')),
-        ],
-      );
+      ];
       try {
         await expectLater(
           loadAudioQueue(player, playlist, 0),
@@ -150,4 +155,55 @@ void main() {
       }
     },
   );
+  for (final shuffled in [false, true]) {
+    test('queue edits reach native player and preserve current track (shuffle=$shuffled)', () async {
+      final previous = api.JustAudioPlatform.instance;
+      final platform = TestAudioPlatform();
+      api.JustAudioPlatform.instance = platform;
+      final player = AudioPlayer(handleInterruptions: false,
+        handleAudioSessionActivation: false, androidApplyAudioAttributes: false);
+      AudioSource song(String id) => AudioSource.uri(Uri.parse('file:///$id.mp3'), tag: id);
+      final order = QueueShuffleOrder();
+      try {
+        await loadAudioQueue(player, [song('a'), song('b'), song('c')], 1,
+          position: const Duration(seconds: 12), shuffleOrder: order);
+        if (shuffled) {
+          await player.shuffle();
+          await player.setShuffleModeEnabled(true);
+        }
+        final originalOrder = player.effectiveSequence.map((s) => s.tag).toList();
+        await player.addAudioSource(song('tail'));
+        expect(player.effectiveSequence.map((s) => s.tag), [...originalOrder, 'tail']);
+        await insertNextAudioSource(player, song('next'), order);
+        final effective = player.effectiveSequence.map((s) => s.tag).toList();
+        final expected = [...originalOrder, 'tail'];
+        expected.insert(expected.indexOf('b') + 1, 'next');
+        expect(effective, expected);
+        expect(player.sequence[player.nextIndex!].tag, 'next');
+        expect(player.sequence[player.currentIndex!].tag, 'b');
+        expect(player.position, const Duration(seconds: 12));
+        expect(platform.lastPlayer.requests.length, 1, reason: 'No reload or seek to zero');
+        expect(platform.lastPlayer.inserts.map((r) => r.index), [3, 2]);
+        await insertNextAudioSource(player, song('next2'), order);
+        expect(player.sequence[player.nextIndex!].tag, 'next2');
+        expect(player.sequence.length, 6);
+      } finally {
+        await player.dispose();
+        api.JustAudioPlatform.instance = previous;
+        await Future.wait(platform.players.map((p) => p.events.close()));
+      }
+    });
+  }
+  test('empty queue accepts a next item and keeps duplicate occurrences', () async {
+    final player = AudioPlayer(handleInterruptions: false,
+      handleAudioSessionActivation: false, androidApplyAudioAttributes: false);
+    final order = QueueShuffleOrder();
+    try {
+      await player.setAudioSources([], preload: false, shuffleOrder: order);
+      await insertNextAudioSource(player, AudioSource.uri(Uri.parse('file:///a.mp3'), tag: 'a'), order);
+      await player.addAudioSource(AudioSource.uri(Uri.parse('file:///a.mp3'), tag: 'a'));
+      expect(player.sequence.map((s) => s.tag), ['a', 'a']);
+    } finally { await player.dispose(); }
+  });
+
 }

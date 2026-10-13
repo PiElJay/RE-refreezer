@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
@@ -9,7 +8,6 @@ import '../service/network_monitor.dart';
 import '../settings.dart';
 import '../translations.i18n.dart';
 import '../ui/elements.dart';
-import '../ui/error.dart';
 import '../ui/menu.dart';
 import 'details_screens.dart';
 import 'downloads_screen.dart';
@@ -94,7 +92,11 @@ class FreezerTitle extends StatelessWidget {
 class HomePageScreen extends StatefulWidget {
   final HomePage? homePage;
   final DeezerChannel? channel;
-  const HomePageScreen({this.homePage, this.channel, super.key});
+  final Future<HomePage> Function()? cacheLoader;
+  final Future<HomePage> Function()? remoteLoader;
+  final Future<void> Function(HomePage)? cacheWriter;
+  const HomePageScreen({this.homePage, this.channel, this.cacheLoader,
+    this.remoteLoader, this.cacheWriter, super.key});
 
   @override
   _HomePageScreenState createState() => _HomePageScreenState();
@@ -102,7 +104,7 @@ class HomePageScreen extends StatefulWidget {
 
 class _HomePageScreenState extends State<HomePageScreen> {
   HomePage? _homePage;
-  bool _cancel = false;
+  int _loadGeneration = 0;
   bool _error = false;
   void _networkChanged() {
     if (mounted && !NetworkMonitor.instance.offline) {
@@ -111,76 +113,46 @@ class _HomePageScreenState extends State<HomePageScreen> {
     }
   }
 
-  void _loadChannel() async {
-    HomePage? hp;
-    //Fetch channel from api
-    try {
-      hp = await deezerAPI.getChannel(widget.channel?.target ?? '');
-    } catch (e) {
-      if (kDebugMode) {
-        print(e);
-      }
+  Future<void> _load() async {
+    final generation = ++_loadGeneration;
+    bool active() => mounted && generation == _loadGeneration;
+    void accept(HomePage page) {
+      if (!active()) return;
+      setState(() { _homePage = page; _error = false; });
     }
-    if (hp == null) {
-      //On error
-      setState(() => _error = true);
+    if (widget.homePage != null && widget.homePage!.sections.isNotEmpty) {
+      accept(widget.homePage!);
       return;
     }
-    setState(() => _homePage = hp);
-  }
-
-  void _loadHomePage() async {
-    //Load local
-    try {
-      HomePage hp = await HomePage().load();
-      if (!mounted) return;
-      setState(() => _homePage = hp);
-    } catch (e) {
-      if (mounted && _homePage == null) setState(() => _error = true);
-      if (kDebugMode) {
-        print(e);
-      }
+    if (widget.channel == null && _homePage == null) {
+      try {
+        final page = await (widget.cacheLoader?.call() ?? HomePage().load());
+        if (!active()) return;
+        if (page.sections.isNotEmpty) accept(page);
+      } catch (_) { /* Missing or old cache: still try the network. */ }
     }
+    if (!active()) return;
     if (settings.offlineMode) {
-      if (mounted && _homePage == null) setState(() => _error = true);
+      if (_homePage == null) setState(() => _error = true);
       return;
     }
-    //On background load from API
     try {
-      HomePage hp = await deezerAPI.homePage();
-      if (_cancel) return;
-      if (hp.sections.isEmpty) {
-        if (mounted && _homePage == null) setState(() => _error = true);
-        return;
+      final page = await (widget.remoteLoader?.call() ??
+        (widget.channel != null
+          ? deezerAPI.getChannel(widget.channel?.target ?? '')
+          : deezerAPI.homePage()));
+      if (!active()) return;
+      if (page.sections.isEmpty) throw StateError('Empty homepage');
+      accept(page);
+      if (widget.channel == null) {
+        try {
+          if (widget.cacheWriter != null) { await widget.cacheWriter!(page); }
+          else { await page.save(); }
+        } catch (_) { /* Cache failures must not hide fresh recommendations. */ }
       }
-      if (!mounted) return;
-      setState(() => _homePage = hp);
-      //Save to cache
-      await _homePage?.save();
-    } catch (e) {
-      if (mounted && _homePage == null) setState(() => _error = true);
-      if (kDebugMode) {
-        print(e);
-      }
+    } catch (_) {
+      if (active() && _homePage == null) setState(() => _error = true);
     }
-  }
-
-  void _load() {
-    if (widget.channel != null) {
-      _loadChannel();
-      return;
-    }
-    if (widget.channel == null && widget.homePage == null) {
-      _loadHomePage();
-      return;
-    }
-    if (widget.homePage?.sections == null ||
-        widget.homePage!.sections.isEmpty) {
-      _loadHomePage();
-      return;
-    }
-    //Already have data
-    setState(() => _homePage = widget.homePage);
   }
 
   @override
@@ -192,7 +164,7 @@ class _HomePageScreenState extends State<HomePageScreen> {
 
   @override
   void dispose() {
-    _cancel = true;
+    ++_loadGeneration;
     NetworkMonitor.instance.removeListener(_networkChanged);
     super.dispose();
   }
@@ -200,9 +172,15 @@ class _HomePageScreenState extends State<HomePageScreen> {
   @override
   Widget build(BuildContext context) {
     if (_error && _homePage == null)
-      return const Padding(
-          padding: EdgeInsets.all(24),
-          child: Text('I suggerimenti Deezer tornano quando sei connesso.'));
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('Suggerimenti Deezer momentaneamente non disponibili.'),
+          TextButton(onPressed: () {
+            setState(() => _error = false);
+            _load();
+          }, child: const Text('Riprova')),
+        ]));
     if (_homePage == null) {
       return const Center(
           child: Padding(
@@ -210,7 +188,6 @@ class _HomePageScreenState extends State<HomePageScreen> {
         child: CircularProgressIndicator(),
       ));
     }
-    if (_error) return const ErrorScreen();
     return Column(
         children: List.generate(
       _homePage?.sections.length ?? 0,

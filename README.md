@@ -82,6 +82,11 @@ Quando manca la connessione, anche in modalità aereo, puoi continuare ad ascolt
 **Deezer offre un piano gratuito in determinati Paesi.** Per utilizzare VYBE con Deezer Free serve un account per cui il piano gratuito sia disponibile e che abbia diritto ad ascoltare i contenuti richiesti.
 
 Tra i Paesi indicati da Deezer figurano Gran Bretagna e Stati Uniti. Negli Stati Uniti sono previste limitazioni specifiche in base al dispositivo. Disponibilità, catalogo e modalità di ascolto possono cambiare: consulta la [pagina ufficiale di Deezer Free](https://support.deezer.com/hc/en-gb/articles/115002456825-Deezer-Free).
+Dunque per chi possiede un account creato e registrato in uno di questi paesi(possibile anche con VPN, per proteggere la vostra privacy /s) ha la possibilità di poter usufruire dell'app.
+RICORDARSI DURANTE LA REGISTRAZIONE SU DEEZER DI TROVARSI IN UNO DI QUESTI PAESI, UNA VOLTA TERMINATA LA REGISTRAZIONE È POSSIBILE EFFETTUARE IL LOGIN SU APP CON LA NUOVA UTENZA. /s
+QUALUNQUE UTILIZZO NON RESPONSABILE DELL'APP È DI RESPONSABILITÀ DELL'UTENTE.
+
+https://www.reddit.com/r/NewToReddit/comments/ilkj7q/what_does_s_mean/?tl=it
 
 VYBE utilizza **MP3 a 128 kbps** come qualità predefinita. MP3 a 320 kbps e FLAC richiedono un abbonamento Deezer con i relativi diritti; prima di selezionarli l’app mostra un avviso.
 
@@ -159,19 +164,20 @@ VYBE MUSIC è attualmente distribuita su GitHub e non è stata pubblicata sul Go
 
 La pubblicazione richiede una preparazione specifica: requisiti tecnici Android, documentazione sulla privacy, dichiarazione dei dati trattati, test e revisione delle norme dello Store. Per l’integrazione Deezer occorre inoltre chiarire le autorizzazioni relative all’accesso al servizio e all’utilizzo dei contenuti.
 
-L’assenza dal Play Store non costituisce, da sola, una valutazione sulla sicurezza dell’app.
+L’assenza dal Play Store non costituisce, da sola, una valutazione sulla sicurezza dell’app ANZI app come queste pubbliche hanno la possibilità di essere riviste nella loro interessa in quanto liberamente accessibili (open source) a differenza di quelle presenti sullo store nella stragrande maggioranza con codice non accessibile.
 
 ---
 
 ## 🧩 Il progetto
 
 Creato da **[PiElJay](https://github.com/PiElJay)**, da una base di [ReFreezer di DJDoubleD](https://github.com/DJDoubleD/refreezer).
+L'idea è nata al solo scopo di personalizzare e migliorare un app che era molto bella ma anche con diversi bug
 
 VYBE MUSIC è un progetto indipendente, non affiliato a Deezer. L’accesso ai contenuti resta soggetto ai diritti dell’account, alle condizioni del servizio e alle norme applicabili.
 
 Hai trovato un problema o hai un’idea per migliorare l’app? [Apri una segnalazione](https://github.com/PiElJay/VYBE-MUSIC/issues).
 
-Se VYBE ti piace, **lascia una stella su GitHub** ⭐
+Se VYBE ti piace, **lasciami una stellina su GitHub** ⭐
 
 <p align="center">
   <a href="docs/BUILD.md">📦 Compilazione</a> · <a href="LICENSE">📄 Licenza GPL-3.0</a>
